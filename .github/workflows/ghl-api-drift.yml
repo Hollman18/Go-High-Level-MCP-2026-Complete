@@ -9,6 +9,7 @@ on:
       - "src/**"
       - "docs/GHL-API-COVERAGE-REPORT.md"
       - "docs/GHL-LOCAL-ENDPOINT-CLASSIFICATION.md"
+      - "docs/api-sources.lock.json"
       - "docs/ghl-api-coverage.json"
       - "docs/API-DASHBOARD.md"
       - "docs/tool-inventory.json"
@@ -25,6 +26,7 @@ on:
       - "src/**"
       - "docs/GHL-API-COVERAGE-REPORT.md"
       - "docs/GHL-LOCAL-ENDPOINT-CLASSIFICATION.md"
+      - "docs/api-sources.lock.json"
       - "docs/ghl-api-coverage.json"
       - "docs/API-DASHBOARD.md"
       - "docs/tool-inventory.json"
@@ -64,14 +66,15 @@ jobs:
           git diff -- \
             docs/GHL-API-COVERAGE-REPORT.md \
             docs/GHL-LOCAL-ENDPOINT-CLASSIFICATION.md \
+            docs/api-sources.lock.json \
             docs/ghl-api-coverage.json \
             docs/API-DASHBOARD.md \
             docs/tool-inventory.json \
             src/tools/official-spec-tools.ts \
             src/tools/official-spec-endpoints.json
-          if [ -n "$(git status --porcelain -- docs/GHL-API-COVERAGE-REPORT.md docs/GHL-LOCAL-ENDPOINT-CLASSIFICATION.md docs/ghl-api-coverage.json docs/API-DASHBOARD.md docs/tool-inventory.json src/tools/official-spec-tools.ts src/tools/official-spec-endpoints.json)" ]; then
+          if [ -n "$(git status --porcelain -- docs/GHL-API-COVERAGE-REPORT.md docs/GHL-LOCAL-ENDPOINT-CLASSIFICATION.md docs/api-sources.lock.json docs/ghl-api-coverage.json docs/API-DASHBOARD.md docs/tool-inventory.json src/tools/official-spec-tools.ts src/tools/official-spec-endpoints.json)" ]; then
             echo "GHL API coverage artifacts changed. Run npm run scan:ghl-api and commit the results."
-            git status --short -- docs/GHL-API-COVERAGE-REPORT.md docs/GHL-LOCAL-ENDPOINT-CLASSIFICATION.md docs/ghl-api-coverage.json docs/API-DASHBOARD.md docs/tool-inventory.json src/tools/official-spec-tools.ts src/tools/official-spec-endpoints.json
+            git status --short -- docs/GHL-API-COVERAGE-REPORT.md docs/GHL-LOCAL-ENDPOINT-CLASSIFICATION.md docs/api-sources.lock.json docs/ghl-api-coverage.json docs/API-DASHBOARD.md docs/tool-inventory.json src/tools/official-spec-tools.ts src/tools/official-spec-endpoints.json
             exit 1
           fi
 
@@ -113,6 +116,7 @@ jobs:
           add-paths: |
             docs/GHL-API-COVERAGE-REPORT.md
             docs/GHL-LOCAL-ENDPOINT-CLASSIFICATION.md
+            docs/api-sources.lock.json
             docs/ghl-api-coverage.json
             docs/API-DASHBOARD.md
             docs/tool-inventory.json
