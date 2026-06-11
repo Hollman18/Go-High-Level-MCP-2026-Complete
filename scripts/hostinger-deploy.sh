@@ -58,8 +58,16 @@ ensure_docker() {
   $SUDO systemctl enable --now docker
 }
 
+has_traefik() {
+  if ! command -v docker >/dev/null 2>&1; then
+    return 1
+  fi
+
+  $SUDO docker ps --format '{{.Names}}' | grep -qi 'traefik'
+}
+
 ensure_caddy() {
-  if [ -z "$MCP_DOMAIN" ] || command -v caddy >/dev/null 2>&1; then
+  if [ -z "$MCP_DOMAIN" ] || has_traefik || command -v caddy >/dev/null 2>&1; then
     return
   fi
 
@@ -102,10 +110,27 @@ install_env_file() {
 
   $SUDO cp "$ENV_SOURCE" "$DEPLOY_PATH/.env"
   $SUDO chmod 600 "$DEPLOY_PATH/.env"
+
+  {
+    printf '\n'
+    printf 'MCP_DOMAIN=%s\n' "$MCP_DOMAIN"
+    if [ -n "$MCP_DOMAIN" ] && has_traefik; then
+      printf 'TRAEFIK_ENABLE=%s\n' "${TRAEFIK_ENABLE:-true}"
+      printf 'TRAEFIK_CERT_RESOLVER=%s\n' "${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+    fi
+  } | $SUDO tee -a "$DEPLOY_PATH/.env" >/dev/null
 }
 
 configure_caddy() {
   if [ -z "$MCP_DOMAIN" ]; then
+    return
+  fi
+
+  if has_traefik; then
+    echo "Traefik detected; using Docker labels and skipping Caddy."
+    if command -v caddy >/dev/null 2>&1; then
+      $SUDO systemctl disable --now caddy >/dev/null 2>&1 || true
+    fi
     return
   fi
 
@@ -130,10 +155,15 @@ EOF
   rm -f "$tmpfile"
   $SUDO caddy validate --config /etc/caddy/Caddyfile
   $SUDO systemctl enable --now caddy
-  $SUDO systemctl reload caddy
+  $SUDO systemctl reload caddy || $SUDO systemctl restart caddy
 }
 
 deploy_compose() {
+  if [ -n "$MCP_DOMAIN" ] && has_traefik; then
+    export TRAEFIK_ENABLE="${TRAEFIK_ENABLE:-true}"
+    export TRAEFIK_CERT_RESOLVER="${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+  fi
+
   cd "$DEPLOY_PATH"
   $SUDO docker compose up -d --build --remove-orphans
   $SUDO docker compose ps
