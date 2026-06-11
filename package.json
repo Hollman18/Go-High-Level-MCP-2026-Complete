@@ -12,6 +12,7 @@
     "scripts/",
     "docs/",
     "examples/",
+    "public/",
     "mcp-apps/",
     "README.md",
     "QUICKSTART.md",

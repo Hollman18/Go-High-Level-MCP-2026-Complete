@@ -1,5 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import express from 'express';
+import path from 'node:path';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from 'crypto';
 import type { GHLConfig } from './types/ghl-types.js';
 import { EnhancedGHLClient } from './enhanced-ghl-client.js';
@@ -32,6 +33,7 @@ export type RequestWithGhlConfig = Request & {
 
 const DEFAULT_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 const AUTH_CODE_TTL_MS = 10 * 60 * 1000;
+const PUBLIC_ASSETS_PATH = path.resolve(process.cwd(), 'public');
 const codes = new Map<string, StoredAuthorizationCode>();
 
 function base64Url(input: Buffer | string): string {
@@ -144,35 +146,163 @@ function renderAuthorizeForm(params: URLSearchParams, error?: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Connect GoHighLevel MCP</title>
+  <title>Conectar GoHighLevel con Claude</title>
+  <link rel="icon" href="/favicon.ico">
   <style>
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: #f7f7f5; color: #161616; }
-    main { max-width: 520px; margin: 9vh auto; padding: 32px; background: #fff; border: 1px solid #ddd; border-radius: 8px; }
-    h1 { font-size: 24px; margin: 0 0 8px; }
-    p { color: #555; line-height: 1.5; }
-    label { display: block; font-weight: 650; margin-top: 18px; }
-    input { width: 100%; box-sizing: border-box; margin-top: 6px; padding: 11px 12px; border: 1px solid #bbb; border-radius: 6px; font-size: 15px; }
-    button { margin-top: 24px; width: 100%; padding: 12px 14px; border: 0; border-radius: 6px; background: #111; color: #fff; font-weight: 700; font-size: 15px; cursor: pointer; }
-    .error { border: 1px solid #e3a1a1; background: #fff1f1; color: #8b1d1d; padding: 10px 12px; border-radius: 6px; }
-    .fine { font-size: 13px; color: #666; }
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      background: #f4f7fb;
+      color: #15171a;
+    }
+    main {
+      width: min(1040px, calc(100vw - 32px));
+      margin: 6vh auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 20px;
+      align-items: start;
+    }
+    section {
+      background: #fff;
+      border: 1px solid #dfe4ec;
+      border-radius: 8px;
+      box-shadow: 0 18px 50px rgba(20, 32, 54, 0.08);
+    }
+    .form-panel { padding: 34px; }
+    .guide-panel { padding: 22px; }
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+    .brand img { width: 210px; max-width: 68%; height: auto; display: block; }
+    .badge {
+      border: 1px solid #dfe4ec;
+      border-radius: 999px;
+      padding: 7px 11px;
+      color: #465162;
+      background: #f6f8fb;
+      font-size: 13px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    h1 { font-size: 28px; line-height: 1.1; margin: 0 0 10px; letter-spacing: 0; }
+    h2 { font-size: 18px; line-height: 1.2; margin: 0 0 8px; letter-spacing: 0; }
+    p { color: #596273; line-height: 1.55; margin: 0; }
+    .intro { max-width: 660px; margin-bottom: 24px; }
+    .field { margin-top: 18px; }
+    label { display: block; font-weight: 750; margin-bottom: 7px; }
+    input {
+      width: 100%;
+      padding: 13px 13px;
+      border: 1px solid #c9d1dc;
+      border-radius: 7px;
+      font-size: 15px;
+      color: #15171a;
+      background: #fff;
+    }
+    input:focus {
+      border-color: #1f8ef1;
+      box-shadow: 0 0 0 3px rgba(31, 142, 241, 0.16);
+      outline: none;
+    }
+    .hint { display: block; margin-top: 7px; color: #6b7482; font-size: 13px; line-height: 1.45; }
+    button {
+      margin-top: 24px;
+      width: 100%;
+      padding: 14px 16px;
+      border: 0;
+      border-radius: 7px;
+      background: #111;
+      color: #fff;
+      font-weight: 800;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    button:hover { background: #252525; }
+    .error { border: 1px solid #e3a1a1; background: #fff1f1; color: #8b1d1d; padding: 11px 12px; border-radius: 7px; margin: 18px 0; }
+    .security-note {
+      margin-top: 18px;
+      padding: 12px 13px;
+      border: 1px solid #dfe4ec;
+      border-radius: 7px;
+      background: #f8fafc;
+      color: #596273;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .guide-panel img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid #dfe4ec;
+      border-radius: 8px;
+      background: #f6f8fb;
+      margin: 14px 0 18px;
+    }
+    ol { margin: 12px 0 0; padding-left: 22px; color: #465162; }
+    li { margin: 10px 0; line-height: 1.45; }
+    code {
+      background: #eef2f7;
+      border: 1px solid #dfe4ec;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    @media (max-width: 860px) {
+      main { grid-template-columns: 1fr; margin: 20px auto; }
+      .form-panel { padding: 24px; }
+      .brand { align-items: flex-start; flex-direction: column; }
+      .brand img { max-width: 240px; width: 72%; }
+      h1 { font-size: 24px; }
+    }
   </style>
 </head>
 <body>
   <main>
-    <h1>Connect GoHighLevel MCP</h1>
-    <p>Enter your own HighLevel private integration token and Location ID. They are encrypted into the access token Claude receives for this connector.</p>
-    ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
-    <form method="post" action="/oauth/authorize">
-      ${hidden}
-      <label for="ghl_api_key">HighLevel API token</label>
-      <input id="ghl_api_key" name="ghl_api_key" type="password" required autocomplete="off">
+    <section class="form-panel">
+      <div class="brand">
+        <img src="/assets/ghl-logo.png" alt="HighLevel">
+        <span class="badge">Claude MCP Connector</span>
+      </div>
+      <h1>Conecta GoHighLevel con Claude</h1>
+      <p class="intro">Usa los mismos nombres que ver&aacute;s en HighLevel: tu <strong>Private Integration Token</strong> y tu <strong>Location ID / Sub-account ID</strong>. Estos datos se cifran dentro del access token que Claude recibe para este conector.</p>
+      ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
+      <form method="post" action="/oauth/authorize">
+        ${hidden}
+        <div class="field">
+          <label for="ghl_api_key">Private Integration Token (PIT)</label>
+          <input id="ghl_api_key" name="ghl_api_key" type="password" required autocomplete="off" placeholder="Pega el PIT de HighLevel">
+          <span class="hint">En HighLevel, abre el sub-account correcto y ve a <code>Settings</code> > <code>Private Integrations</code> > <code>Create New Integration</code>. Al crearla, copia el token una sola vez.</span>
+        </div>
 
-      <label for="ghl_location_id">HighLevel Location ID</label>
-      <input id="ghl_location_id" name="ghl_location_id" type="text" required autocomplete="off">
+        <div class="field">
+          <label for="ghl_location_id">Location ID / Sub-account ID</label>
+          <input id="ghl_location_id" name="ghl_location_id" type="text" required autocomplete="off" placeholder="Pega el Location ID">
+          <span class="hint">En el sub-account seleccionado, ve a <code>Settings</code> > <code>Business Profile</code>. Opci&oacute;n r&aacute;pida: copia el valor despu&eacute;s de <code>/location/</code> en la URL de HighLevel.</span>
+        </div>
 
-      <button type="submit">Authorize connector</button>
-    </form>
-    <p class="fine">Use a token scoped for the sub-account you want Claude to access.</p>
+        <button type="submit">Autorizar conector GoHighLevel</button>
+      </form>
+      <p class="security-note">Usa un token con permisos solo para el sub-account que Claude debe acceder. No pegues este token dentro de un chat de Claude.</p>
+    </section>
+    <section class="guide-panel" aria-label="HighLevel setup guide">
+      <h2>&iquest;D&oacute;nde consigo estos datos?</h2>
+      <p>Esta gu&iacute;a r&aacute;pida muestra la ruta dentro de HighLevel.</p>
+      <img src="/assets/ghl-setup-guide.gif" alt="Guia animada para encontrar el Location ID y el Private Integration Token en HighLevel">
+      <ol>
+        <li>Abre el sub-account exacto que Claude debe usar.</li>
+        <li>Copia el <strong>Location ID</strong> en <code>Settings</code> > <code>Business Profile</code>.</li>
+        <li>Crea el token en <code>Settings</code> > <code>Private Integrations</code>.</li>
+        <li>Selecciona solo los scopes necesarios, copia el token y p&eacute;galo aqu&iacute;.</li>
+      </ol>
+    </section>
   </main>
 </body>
 </html>`;
@@ -180,6 +310,15 @@ function renderAuthorizeForm(params: URLSearchParams, error?: string): string {
 
 export function createByoGhlOAuthRouter(options: ByoGhlOAuthOptions): Router {
   const router = express.Router();
+
+  router.use('/assets', express.static(PUBLIC_ASSETS_PATH, {
+    immutable: true,
+    maxAge: '7d',
+  }));
+
+  router.get('/favicon.ico', (_req, res) => {
+    res.sendFile(path.join(PUBLIC_ASSETS_PATH, 'favicon.ico'));
+  });
 
   router.get('/.well-known/oauth-authorization-server', (req, res) => {
     res.json(metadata(getPublicBaseUrl(req, options.publicBaseUrl)));
