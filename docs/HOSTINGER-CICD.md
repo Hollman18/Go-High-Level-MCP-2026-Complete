@@ -1,0 +1,147 @@
+# Hostinger VPS CI/CD
+
+This guide turns the repository into a remotely hosted GoHighLevel MCP server.
+
+## What This Deploys
+
+- GitHub fork as the source of truth.
+- GitHub Actions on every push to `main`.
+- Hostinger VPS running Docker Compose.
+- Caddy reverse proxy with automatic HTTPS when `MCP_DOMAIN` is set.
+- Streamable HTTP MCP endpoint at `https://your-domain.example/mcp`.
+- Bearer-token protection for hosted MCP routes via `MCP_AUTH_TOKEN`.
+
+## Required GitHub Secrets
+
+Create these in GitHub: `Settings` -> `Secrets and variables` -> `Actions`.
+
+| Secret | Required | Example |
+| --- | --- | --- |
+| `HOSTINGER_HOST` | Yes | `123.123.123.123` |
+| `HOSTINGER_USER` | Yes | `root` |
+| `HOSTINGER_SSH_KEY` | Yes | private SSH key with VPS access |
+| `HOSTINGER_SSH_PORT` | No | `22` |
+| `HOSTINGER_DEPLOY_PATH` | No | `/opt/ghl-mcp` |
+| `MCP_DOMAIN` | Recommended | `mcp.example.com` |
+| `CADDY_EMAIL` | No | `admin@example.com` |
+| `GHL_API_KEY` | Yes | HighLevel Private Integration or OAuth access token |
+| `GHL_LOCATION_ID` | Yes | HighLevel sub-account/location ID |
+| `GHL_BASE_URL` | No | `https://services.leadconnectorhq.com` |
+| `GHL_API_VERSION` | No | `2023-02-21` |
+| `GHL_TOOL_PROFILE` | No | `curated` |
+| `MCP_AUTH_TOKEN` | Yes | long random token for remote MCP clients |
+| `OPENAI_API_KEY` | No | optional future AI-assisted features |
+
+`GHL_API_VERSION=2023-02-21` is the HighLevel API `Version` header, not the project year.
+
+## VPS Prerequisites
+
+The deploy script can install Git, Docker, UFW, and Caddy on Ubuntu/Debian. Use a fresh VPS or a VPS dedicated to this service, because the script manages `/etc/caddy/Caddyfile` when `MCP_DOMAIN` is set.
+
+Point DNS before the first deploy:
+
+```text
+Type: A
+Name: mcp
+Value: your VPS public IP
+```
+
+## SSH Key Setup
+
+On your machine or in a secure admin environment:
+
+```bash
+ssh-keygen -t ed25519 -C "github-actions-ghl-mcp" -f ./ghl_mcp_deploy_key
+```
+
+Add the public key to the VPS:
+
+```bash
+ssh-copy-id -i ./ghl_mcp_deploy_key.pub root@YOUR_VPS_IP
+```
+
+Put the private key contents into the GitHub secret `HOSTINGER_SSH_KEY`.
+
+## First Deployment
+
+Push to `main`, or run the workflow manually:
+
+```text
+Actions -> Deploy to Hostinger -> Run workflow
+```
+
+On normal pushes, the deploy job skips itself until required secrets are configured. On manual runs, missing secrets fail loudly so setup issues are visible.
+
+The workflow will:
+
+1. Install dependencies.
+2. Build the server.
+3. Run tests.
+4. Copy a generated `.env` to the VPS.
+5. Clone or update the fork in `HOSTINGER_DEPLOY_PATH`.
+6. Run `docker compose up -d --build --remove-orphans`.
+7. Configure Caddy for `MCP_DOMAIN` when provided.
+
+## Hosted URL
+
+If `MCP_DOMAIN=mcp.example.com`, the remote MCP endpoint is:
+
+```text
+https://mcp.example.com/mcp
+```
+
+Health check:
+
+```bash
+curl https://mcp.example.com/health
+```
+
+Protected tools check:
+
+```bash
+curl -H "Authorization: Bearer $MCP_AUTH_TOKEN" https://mcp.example.com/tools
+```
+
+## Client Install Snippet
+
+Use the URL plus the bearer token in clients that support remote Streamable HTTP MCP servers:
+
+```json
+{
+  "mcpServers": {
+    "ghl": {
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_MCP_AUTH_TOKEN"
+      }
+    }
+  }
+}
+```
+
+Keep `MCP_AUTH_TOKEN` private. If you publish the URL without a token, anyone who can reach it may be able to execute MCP tools against the configured GoHighLevel account.
+
+## Updating Production
+
+Commit to `main`. GitHub Actions deploys automatically.
+
+To redeploy manually:
+
+```text
+Actions -> Deploy to Hostinger -> Run workflow
+```
+
+To inspect the VPS:
+
+```bash
+ssh root@YOUR_VPS_IP
+cd /opt/ghl-mcp
+docker compose ps
+docker compose logs -f --tail=100
+```
+
+## Public Distribution Options
+
+For a private/team server, use one shared `MCP_AUTH_TOKEN`.
+
+For a public product, do not reuse your own GoHighLevel token for everyone. Build a separate onboarding layer where each user provides their own HighLevel authorization, or run isolated deployments per customer. The current server supports per-request `x-ghl-access-token` and `x-ghl-location-id` headers, but many MCP clients do not expose a friendly credential onboarding flow for those headers.

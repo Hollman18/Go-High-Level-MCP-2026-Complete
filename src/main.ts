@@ -16,6 +16,7 @@ import { EnhancedGHLClient } from './enhanced-ghl-client.js';
 import { ToolRegistry } from './tool-registry.js';
 import { GHLConfig } from './types/ghl-types.js';
 import { registerExecuteRoutes } from './execute-route.js';
+import { createHttpAuthMiddleware } from './http-auth.js';
 
 dotenv.config();
 
@@ -88,6 +89,10 @@ async function main() {
     log('debug', `${req.method} ${req.path}`, { ip: req.ip });
     next();
   });
+  if (!process.env.MCP_AUTH_TOKEN) {
+    log('warn', 'MCP_AUTH_TOKEN is not set; HTTP MCP endpoints are unauthenticated');
+  }
+  app.use(createHttpAuthMiddleware({ token: process.env.MCP_AUTH_TOKEN }));
 
   app.all('/mcp', async (req, res) => {
     try {

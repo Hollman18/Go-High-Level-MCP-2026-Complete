@@ -7,4 +7,5 @@ services:
       MCP_SERVER_PORT: "8000"
       GHL_TOOL_PROFILE: "${GHL_TOOL_PROFILE:-curated}"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped

@@ -99,6 +99,8 @@ HTTP also exposes:
 - `POST /execute`
 - `POST /tools/call`
 
+For hosted HTTP deployments, set `MCP_AUTH_TOKEN` and send `Authorization: Bearer <token>` to protected MCP routes. `GET /` and `GET /health` remain public for discovery and uptime checks.
+
 ## MCP Apps
 
 ```bash
@@ -149,6 +151,7 @@ Start agents with the curated profile and prefer these high-level tools before r
 - [Safety](docs/SAFETY.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Deployment](docs/DEPLOYMENT.md)
+- [Hostinger CI/CD](docs/HOSTINGER-CICD.md)
 - [Development](docs/DEVELOPMENT.md)
 - [API Coverage](docs/API-COVERAGE.md)
 - [Companion Tooling](docs/TOOLING.md)
