@@ -1,0 +1,52 @@
+name: Onboarding Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  onboarding:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Doctor without credentials
+        run: npm run doctor -- --json
+
+      - name: Agent check without credentials
+        run: npm run agent:check -- --skip-tests --no-network --json
+
+      - name: Generate client configs
+        run: |
+          npm run configure:codex
+          npm run configure:claude
+          npm run configure:cursor
+          npm run configure:windsurf
+
+      - name: Build MCP Apps
+        run: npm run apps:install && npm run apps:build
+
+      - name: Verify package contents
+        run: npm pack --dry-run
