@@ -10,6 +10,7 @@ import type { ToolRegistry } from './tool-registry.js';
 import type { GHLConfig } from './types/ghl-types.js';
 import { EnhancedGHLClient } from './enhanced-ghl-client.js';
 import { ToolRegistry as ToolRegistryClass } from './tool-registry.js';
+import type { RequestWithGhlConfig } from './byo-ghl-oauth.js';
 
 function toRouteToolDescriptor(tool: Tool) {
   const schema: Record<string, unknown> =
@@ -51,11 +52,15 @@ export function registerExecuteRoutes(
       return;
     }
 
+    const oauthConfig = (req as RequestWithGhlConfig).ghlConfig;
     const perReqToken = req.headers['x-ghl-access-token'] as string | undefined;
     const perReqLoc = req.headers['x-ghl-location-id'] as string | undefined;
 
     let registry = defaultRegistry;
-    if (perReqToken && perReqLoc && baseConfig) {
+    if (oauthConfig) {
+      const perReqClient = new EnhancedGHLClient(oauthConfig);
+      registry = new ToolRegistryClass(perReqClient) as unknown as ToolRegistry;
+    } else if (perReqToken && perReqLoc && baseConfig) {
       const perReqClient = new EnhancedGHLClient({
         ...baseConfig,
         accessToken: perReqToken,

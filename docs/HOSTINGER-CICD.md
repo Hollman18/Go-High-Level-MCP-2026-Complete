@@ -10,6 +10,7 @@ This guide turns the repository into a remotely hosted GoHighLevel MCP server.
 - Caddy reverse proxy with automatic HTTPS when `MCP_DOMAIN` is set.
 - Streamable HTTP MCP endpoint at `https://your-domain.example/mcp`.
 - Bearer-token protection for hosted MCP routes via `MCP_AUTH_TOKEN`.
+- Optional public BYO mode where each user authorizes with their own GoHighLevel token.
 
 ## Required GitHub Secrets
 
@@ -29,7 +30,10 @@ Create these in GitHub: `Settings` -> `Secrets and variables` -> `Actions`.
 | `GHL_BASE_URL` | No | `https://services.leadconnectorhq.com` |
 | `GHL_API_VERSION` | No | `2023-02-21` |
 | `GHL_TOOL_PROFILE` | No | `curated` |
+| `MCP_AUTH_MODE` | No | `static` or `byo-ghl-oauth` |
 | `MCP_AUTH_TOKEN` | Yes | long random token for remote MCP clients |
+| `MCP_PUBLIC_BASE_URL` | Required for BYO mode | `https://go.mcpgohighlevel.com` |
+| `MCP_OAUTH_SECRET` | Recommended for BYO mode | long random encryption secret |
 | `OPENAI_API_KEY` | No | optional future AI-assisted features |
 
 `GHL_API_VERSION=2023-02-21` is the HighLevel API `Version` header, not the project year.
@@ -84,10 +88,16 @@ The workflow will:
 
 ## Hosted URL
 
-If `MCP_DOMAIN=mcp.example.com`, the remote MCP endpoint is:
+Recommended production subdomain:
 
 ```text
-https://mcp.example.com/mcp
+go.mcpgohighlevel.com
+```
+
+Keep `mcpgohighlevel.com` available for a public install page, documentation, and support. If `MCP_DOMAIN=go.mcpgohighlevel.com`, the remote MCP endpoint is:
+
+```text
+https://go.mcpgohighlevel.com/mcp
 ```
 
 Health check:
@@ -103,6 +113,8 @@ curl -H "Authorization: Bearer $MCP_AUTH_TOKEN" https://mcp.example.com/tools
 ```
 
 ## Client Install Snippet
+
+### Private/team mode
 
 Use the URL plus the bearer token in clients that support remote Streamable HTTP MCP servers:
 
@@ -120,6 +132,25 @@ Use the URL plus the bearer token in clients that support remote Streamable HTTP
 ```
 
 Keep `MCP_AUTH_TOKEN` private. If you publish the URL without a token, anyone who can reach it may be able to execute MCP tools against the configured GoHighLevel account.
+
+### Public BYO GoHighLevel mode
+
+Use this when the connector should be installable by many people without sharing your GoHighLevel account:
+
+```text
+MCP_AUTH_MODE=byo-ghl-oauth
+MCP_PUBLIC_BASE_URL=https://go.mcpgohighlevel.com
+MCP_OAUTH_SECRET=long_random_secret
+MCP_AUTH_TOKEN=long_random_fallback_secret
+```
+
+In this mode, users install:
+
+```text
+https://go.mcpgohighlevel.com/mcp
+```
+
+The MCP server exposes OAuth discovery, authorization, dynamic registration, and token exchange endpoints. During the OAuth flow, each user enters their own HighLevel API token and Location ID. The server verifies the credentials, encrypts them into the MCP access token, and uses those credentials for that user's tool calls.
 
 ## Updating Production
 
@@ -144,4 +175,4 @@ docker compose logs -f --tail=100
 
 For a private/team server, use one shared `MCP_AUTH_TOKEN`.
 
-For a public product, do not reuse your own GoHighLevel token for everyone. Build a separate onboarding layer where each user provides their own HighLevel authorization, or run isolated deployments per customer. The current server supports per-request `x-ghl-access-token` and `x-ghl-location-id` headers, but many MCP clients do not expose a friendly credential onboarding flow for those headers.
+For a public product, use `MCP_AUTH_MODE=byo-ghl-oauth` so every user brings their own GoHighLevel token and Location ID. Do not reuse your own GoHighLevel token for everyone.

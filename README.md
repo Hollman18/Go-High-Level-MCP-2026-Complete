@@ -101,6 +101,8 @@ HTTP also exposes:
 
 For hosted HTTP deployments, set `MCP_AUTH_TOKEN` and send `Authorization: Bearer <token>` to protected MCP routes. `GET /` and `GET /health` remain public for discovery and uptime checks.
 
+For a public multi-user connector, set `MCP_AUTH_MODE=byo-ghl-oauth`. Users connect to the same remote MCP URL and authorize with their own GoHighLevel token and Location ID through the built-in OAuth flow.
+
 ## MCP Apps
 
 ```bash

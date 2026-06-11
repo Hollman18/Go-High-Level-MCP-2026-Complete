@@ -17,6 +17,11 @@ import { ToolRegistry } from './tool-registry.js';
 import { GHLConfig } from './types/ghl-types.js';
 import { registerExecuteRoutes } from './execute-route.js';
 import { createHttpAuthMiddleware } from './http-auth.js';
+import {
+  RequestWithGhlConfig,
+  createByoGhlOAuthRouter,
+  createByoGhlResourceMiddleware,
+} from './byo-ghl-oauth.js';
 
 dotenv.config();
 
@@ -30,7 +35,7 @@ function log(level: LogLevel, msg: string, data?: Record<string, unknown>) {
   out.write(JSON.stringify({ ts: new Date().toISOString(), level, msg, ...(data || {}) }) + '\n');
 }
 
-function readConfig(): GHLConfig {
+function readConfig(requireCredentials = true): GHLConfig {
   const config: GHLConfig = {
     accessToken: process.env.GHL_API_KEY || '',
     baseUrl: process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com',
@@ -38,8 +43,8 @@ function readConfig(): GHLConfig {
     locationId: process.env.GHL_LOCATION_ID || '',
   };
 
-  if (!config.accessToken) throw new Error('GHL_API_KEY is required');
-  if (!config.locationId) throw new Error('GHL_LOCATION_ID is required');
+  if (requireCredentials && !config.accessToken) throw new Error('GHL_API_KEY is required');
+  if (requireCredentials && !config.locationId) throw new Error('GHL_LOCATION_ID is required');
   return config;
 }
 
@@ -54,7 +59,13 @@ function createMcpServer(client: EnhancedGHLClient): McpServer {
 
 async function main() {
   const port = parseInt(process.env.PORT || process.env.MCP_SERVER_PORT || '8000', 10);
-  const config = readConfig();
+  const authMode = process.env.MCP_AUTH_MODE || 'static';
+  const isByoGhlOAuth = authMode === 'byo-ghl-oauth';
+  const config = readConfig(!isByoGhlOAuth);
+  const oauthSecret = process.env.MCP_OAUTH_SECRET || process.env.MCP_AUTH_TOKEN || '';
+  if (isByoGhlOAuth && !oauthSecret) {
+    throw new Error('MCP_OAUTH_SECRET or MCP_AUTH_TOKEN is required when MCP_AUTH_MODE=byo-ghl-oauth');
+  }
   const ghlClient = new EnhancedGHLClient(config);
   const registry = new ToolRegistry(ghlClient);
   const toolCount = registry.getToolCount();
@@ -65,11 +76,15 @@ async function main() {
     version: config.version,
     locationId: config.locationId,
     tools: toolCount,
+    authMode,
   });
 
-  await ghlClient.testConnection();
+  if (!isByoGhlOAuth) {
+    await ghlClient.testConnection();
+  }
 
   const app = express();
+  app.set('trust proxy', true);
   app.use(cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
@@ -85,22 +100,38 @@ async function main() {
     credentials: true,
   }));
   app.use(express.json());
+  app.use(express.urlencoded({ extended: false }));
   app.use((req, _res, next) => {
     log('debug', `${req.method} ${req.path}`, { ip: req.ip });
     next();
   });
-  if (!process.env.MCP_AUTH_TOKEN) {
+  if (isByoGhlOAuth) {
+    app.use(createByoGhlOAuthRouter({
+      baseConfig: config,
+      publicBaseUrl: process.env.MCP_PUBLIC_BASE_URL,
+      secret: oauthSecret,
+    }));
+    app.use(createByoGhlResourceMiddleware({
+      baseConfig: config,
+      publicBaseUrl: process.env.MCP_PUBLIC_BASE_URL,
+      secret: oauthSecret,
+    }));
+  } else if (!process.env.MCP_AUTH_TOKEN) {
     log('warn', 'MCP_AUTH_TOKEN is not set; HTTP MCP endpoints are unauthenticated');
+  } else {
+    app.use(createHttpAuthMiddleware({ token: process.env.MCP_AUTH_TOKEN }));
   }
-  app.use(createHttpAuthMiddleware({ token: process.env.MCP_AUTH_TOKEN }));
 
   app.all('/mcp', async (req, res) => {
     try {
+      const oauthConfig = (req as RequestWithGhlConfig).ghlConfig;
       const reqAccessToken = req.headers['x-ghl-access-token'] as string | undefined;
       const reqLocationId = req.headers['x-ghl-location-id'] as string | undefined;
-      const client = reqAccessToken && reqLocationId
-        ? new EnhancedGHLClient({ ...config, accessToken: reqAccessToken, locationId: reqLocationId })
-        : ghlClient;
+      const client = oauthConfig
+        ? new EnhancedGHLClient(oauthConfig)
+        : (reqAccessToken && reqLocationId
+          ? new EnhancedGHLClient({ ...config, accessToken: reqAccessToken, locationId: reqLocationId })
+          : ghlClient);
       const requestServer = createMcpServer(client);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       await requestServer.connect(transport);
@@ -119,7 +150,9 @@ async function main() {
     log('info', 'SSE connection', { sessionId });
 
     try {
-      const sseServer = createMcpServer(ghlClient);
+      const oauthConfig = (req as RequestWithGhlConfig).ghlConfig;
+      const sseClient = oauthConfig ? new EnhancedGHLClient(oauthConfig) : ghlClient;
+      const sseServer = createMcpServer(sseClient);
       const transport = new SSEServerTransport('/sse', res);
       await sseServer.connect(transport);
       req.on('close', () => {
