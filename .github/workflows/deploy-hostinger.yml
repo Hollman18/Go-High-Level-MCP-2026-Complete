@@ -1,0 +1,156 @@
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: hostinger-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test -- --runInBand
+
+  deploy:
+    name: Deploy VPS
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_HOST }}
+      SSH_USER: ${{ secrets.HOSTINGER_USER }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT || '22' }}
+      DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH || '/opt/ghl-mcp' }}
+      REPO_URL: https://github.com/${{ github.repository }}.git
+      BRANCH: ${{ github.ref_name }}
+      MCP_DOMAIN: ${{ secrets.MCP_DOMAIN }}
+      CADDY_EMAIL: ${{ secrets.CADDY_EMAIL }}
+      GHL_API_KEY: ${{ secrets.GHL_API_KEY }}
+      GHL_LOCATION_ID: ${{ secrets.GHL_LOCATION_ID }}
+      GHL_BASE_URL: ${{ secrets.GHL_BASE_URL || 'https://services.leadconnectorhq.com' }}
+      GHL_API_VERSION: ${{ secrets.GHL_API_VERSION || '2023-02-21' }}
+      GHL_TOOL_PROFILE: ${{ secrets.GHL_TOOL_PROFILE || 'curated' }}
+      MCP_AUTH_MODE: ${{ secrets.MCP_AUTH_MODE || 'static' }}
+      MCP_AUTH_TOKEN: ${{ secrets.MCP_AUTH_TOKEN }}
+      MCP_PUBLIC_BASE_URL: ${{ secrets.MCP_PUBLIC_BASE_URL }}
+      MCP_OAUTH_SECRET: ${{ secrets.MCP_OAUTH_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check deployment secrets
+        id: readiness
+        run: |
+          set -euo pipefail
+          required=(
+            SSH_HOST
+            SSH_USER
+            HOSTINGER_SSH_KEY
+            MCP_AUTH_TOKEN
+          )
+          if [ "${MCP_AUTH_MODE:-static}" = "byo-ghl-oauth" ]; then
+            required+=(MCP_PUBLIC_BASE_URL)
+          else
+            required+=(GHL_API_KEY GHL_LOCATION_ID)
+          fi
+          missing=()
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            message="Missing required deployment secrets: ${missing[*]}"
+            if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+              echo "::error::$message"
+              exit 1
+            fi
+            echo "::notice::$message. Skipping deploy until secrets are configured."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+        env:
+          HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+
+      - name: Prepare SSH
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$HOSTINGER_SSH_KEY" > ~/.ssh/hostinger_deploy_key
+          chmod 600 ~/.ssh/hostinger_deploy_key
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+        env:
+          HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+
+      - name: Prepare deployment env file
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          umask 077
+          {
+            printf 'GHL_API_KEY=%s\n' "$GHL_API_KEY"
+            printf 'GHL_LOCATION_ID=%s\n' "$GHL_LOCATION_ID"
+            printf 'GHL_BASE_URL=%s\n' "$GHL_BASE_URL"
+            printf 'GHL_API_VERSION=%s\n' "$GHL_API_VERSION"
+            printf 'MCP_SERVER_PORT=8000\n'
+            printf 'NODE_ENV=production\n'
+            printf 'GHL_TOOL_PROFILE=%s\n' "$GHL_TOOL_PROFILE"
+            printf 'MCP_AUTH_MODE=%s\n' "$MCP_AUTH_MODE"
+            printf 'MCP_AUTH_TOKEN=%s\n' "$MCP_AUTH_TOKEN"
+            if [ -n "${MCP_PUBLIC_BASE_URL:-}" ]; then
+              printf 'MCP_PUBLIC_BASE_URL=%s\n' "$MCP_PUBLIC_BASE_URL"
+            fi
+            if [ -n "${MCP_OAUTH_SECRET:-}" ]; then
+              printf 'MCP_OAUTH_SECRET=%s\n' "$MCP_OAUTH_SECRET"
+            fi
+            if [ -n "${OPENAI_API_KEY:-}" ]; then
+              printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY"
+            fi
+          } > .deploy.env
+
+      - name: Copy deployment files
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/hostinger_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "mkdir -p /tmp/ghl-mcp-deploy"
+          scp -i ~/.ssh/hostinger_deploy_key -P "$SSH_PORT" .deploy.env "$SSH_USER@$SSH_HOST:/tmp/ghl-mcp.env"
+          scp -i ~/.ssh/hostinger_deploy_key -P "$SSH_PORT" scripts/hostinger-deploy.sh "$SSH_USER@$SSH_HOST:/tmp/ghl-mcp-deploy/hostinger-deploy.sh"
+
+      - name: Run remote deployment
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/hostinger_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "REPO_URL='$REPO_URL' BRANCH='$BRANCH' DEPLOY_PATH='$DEPLOY_PATH' MCP_DOMAIN='$MCP_DOMAIN' CADDY_EMAIL='$CADDY_EMAIL' ENV_SOURCE='/tmp/ghl-mcp.env' bash /tmp/ghl-mcp-deploy/hostinger-deploy.sh"
+
+      - name: Smoke test
+        if: steps.readiness.outputs.ready == 'true' && env.MCP_DOMAIN != ''
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "https://$MCP_DOMAIN/health"
