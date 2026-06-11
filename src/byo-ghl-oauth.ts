@@ -66,6 +66,31 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+function oauthParamsFromRecord(record: Record<string, unknown>): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const key of ['response_type', 'client_id', 'redirect_uri', 'state', 'code_challenge', 'code_challenge_method', 'scope', 'resource']) {
+    const value = record[key];
+    if (typeof value === 'string') params.set(key, value);
+  }
+  return params;
+}
+
+function friendlyGhlAuthError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const status = raw.match(/GHL API Error \((\d+)\)/)?.[1];
+
+  if (status === '401' || status === '403') {
+    return 'No se pudo validar el Private Integration Token. Revisa que el PIT sea correcto, que pertenezca a este sub-account y que incluya permisos para leer la Location.';
+  }
+  if (status === '404') {
+    return 'No se encontro ese Location ID. Revisa que el Location ID pertenezca al mismo sub-account del PIT.';
+  }
+  if (/timeout|network|ENOTFOUND|ECONN/i.test(raw)) {
+    return 'HighLevel no respondio a tiempo. Intenta de nuevo en unos segundos.';
+  }
+  return 'No se pudo validar HighLevel con esos datos. Revisa el PIT, el Location ID y los permisos seleccionados.';
+}
+
 export function sealByoGhlToken(payload: ByoGhlTokenPayload, secret: string): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', deriveKey(secret), iv);
@@ -372,6 +397,7 @@ export function createByoGhlOAuthRouter(options: ByoGhlOAuthOptions): Router {
 
   router.post('/oauth/authorize', async (req, res) => {
     cleanupCodes();
+    const oauthParams = oauthParamsFromRecord(req.body ?? {});
     const redirectUri = String(req.body.redirect_uri || '');
     const state = String(req.body.state || '');
     const clientId = String(req.body.client_id || 'dynamic-client');
@@ -382,11 +408,11 @@ export function createByoGhlOAuthRouter(options: ByoGhlOAuthOptions): Router {
     const locationId = String(req.body.ghl_location_id || '');
 
     if (responseType && responseType !== 'code') {
-      res.status(400).type('html').send(renderAuthorizeForm(new URLSearchParams(req.body), 'Unsupported OAuth response type.'));
+      res.status(400).type('html').send(renderAuthorizeForm(oauthParams, 'Unsupported OAuth response type.'));
       return;
     }
     if (!redirectUri || !accessToken || !locationId) {
-      res.status(400).type('html').send(renderAuthorizeForm(new URLSearchParams(req.body), 'Missing redirect URI, token, or Location ID.'));
+      res.status(400).type('html').send(renderAuthorizeForm(oauthParams, 'Falta el redirect URI, el PIT o el Location ID.'));
       return;
     }
 
@@ -399,7 +425,7 @@ export function createByoGhlOAuthRouter(options: ByoGhlOAuthOptions): Router {
     try {
       await new EnhancedGHLClient(config).testConnection();
     } catch (error) {
-      res.status(400).type('html').send(renderAuthorizeForm(new URLSearchParams(req.body), `HighLevel auth check failed: ${error instanceof Error ? error.message : String(error)}`));
+      res.status(400).type('html').send(renderAuthorizeForm(oauthParams, friendlyGhlAuthError(error)));
       return;
     }
 
@@ -418,10 +444,15 @@ export function createByoGhlOAuthRouter(options: ByoGhlOAuthOptions): Router {
       expiresAt: Date.now() + AUTH_CODE_TTL_MS,
     });
 
-    const redirect = new URL(redirectUri);
-    redirect.searchParams.set('code', code);
-    if (state) redirect.searchParams.set('state', state);
-    res.redirect(302, redirect.toString());
+    try {
+      const redirect = new URL(redirectUri);
+      redirect.searchParams.set('code', code);
+      if (state) redirect.searchParams.set('state', state);
+      res.redirect(302, redirect.toString());
+    } catch {
+      codes.delete(code);
+      res.status(400).type('html').send(renderAuthorizeForm(oauthParams, 'El redirect URI enviado por el cliente MCP no es valido.'));
+    }
   });
 
   router.post('/oauth/token', (req, res) => {
