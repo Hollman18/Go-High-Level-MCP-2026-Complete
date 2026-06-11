@@ -165,7 +165,7 @@ deploy_compose() {
   fi
 
   cd "$DEPLOY_PATH"
-  $SUDO docker compose up -d --build --remove-orphans
+  $SUDO docker compose up -d --force-recreate --build --remove-orphans
   $SUDO docker compose ps
 }
 
