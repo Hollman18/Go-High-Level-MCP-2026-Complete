@@ -71,7 +71,7 @@ async function main() {
   const toolCount = registry.getToolCount();
   const startTime = Date.now();
   const publicBaseUrl = (process.env.MCP_PUBLIC_BASE_URL || '').replace(/\/$/, '');
-  const logoUri = publicBaseUrl ? `${publicBaseUrl}/assets/ghl-icon.png` : '/assets/ghl-icon.png';
+  const logoUri = publicBaseUrl ? `${publicBaseUrl}/logo.png` : '/logo.png';
 
   log('info', 'Initializing GHL MCP server', {
     baseUrl: config.baseUrl,

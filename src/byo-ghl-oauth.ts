@@ -118,8 +118,8 @@ function metadata(baseUrl: string) {
     issuer: baseUrl,
     display_name: 'GoHighLevel MCP',
     organization_name: 'GoHighLevel',
-    description: 'Connect Claude to a GoHighLevel sub-account with your Private Integration Token.',
-    logo_uri: `${baseUrl}/assets/ghl-icon.png`,
+    description: 'Connect any MCP-compatible AI agent to a GoHighLevel sub-account with your Private Integration Token.',
+    logo_uri: `${baseUrl}/logo.png`,
     authorization_endpoint: `${baseUrl}/oauth/authorize`,
     token_endpoint: `${baseUrl}/oauth/token`,
     registration_endpoint: `${baseUrl}/oauth/register`,
@@ -137,7 +137,7 @@ function protectedResourceMetadata(baseUrl: string) {
     resource_name: 'GoHighLevel MCP',
     organization_name: 'GoHighLevel',
     description: 'Remote MCP connector for GoHighLevel sub-accounts.',
-    logo_uri: `${baseUrl}/assets/ghl-icon.png`,
+    logo_uri: `${baseUrl}/logo.png`,
     resource_documentation: baseUrl,
     authorization_servers: [baseUrl],
     scopes_supported: ['ghl:read', 'ghl:write'],
@@ -155,7 +155,7 @@ function renderAuthorizeForm(params: URLSearchParams, error?: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Conectar GoHighLevel con Claude</title>
+  <title>Conectar GoHighLevel con tu agente IA</title>
   <link rel="icon" href="/favicon.ico">
   <link rel="icon" type="image/png" href="/assets/ghl-icon.png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -280,10 +280,10 @@ function renderAuthorizeForm(params: URLSearchParams, error?: string): string {
     <section class="form-panel">
       <div class="brand">
         <img src="/assets/ghl-logo.png" alt="HighLevel">
-        <span class="badge">Claude MCP Connector</span>
+        <span class="badge">MCP Connector</span>
       </div>
-      <h1>Conecta GoHighLevel con Claude</h1>
-      <p class="intro">Pega 2 datos de tu sub-account: <strong>Private Integration Token</strong> y <strong>Location ID</strong>. Claude recibir&aacute; un token cifrado para conectarse.</p>
+      <h1>Conecta GoHighLevel con tu agente IA</h1>
+      <p class="intro">Pega 2 datos de tu sub-account: <strong>Private Integration Token</strong> y <strong>Location ID</strong>. Tu agente recibir&aacute; un token cifrado para conectarse.</p>
       ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
       <form method="post" action="/oauth/authorize">
         ${hidden}
@@ -306,9 +306,9 @@ function renderAuthorizeForm(params: URLSearchParams, error?: string): string {
     <section class="guide-panel" aria-label="HighLevel setup guide">
       <h2>Gu&iacute;a r&aacute;pida</h2>
       <p>D&oacute;nde encontrar cada dato en HighLevel.</p>
-      <img src="/assets/ghl-setup-guide.gif" alt="Guia animada para encontrar el Location ID y el Private Integration Token en HighLevel">
+      <img src="/assets/ghl-setup-guide.gif?v=agent-mcp" alt="Guia animada para encontrar el Location ID y el Private Integration Token en HighLevel">
       <ol>
-        <li>Abre el sub-account que Claude usar&aacute;.</li>
+        <li>Abre el sub-account que usar&aacute; tu agente.</li>
         <li>Copia el <strong>Location ID</strong> en <code>Business Profile</code>.</li>
         <li>Crea el <strong>PIT</strong> en <code>Private Integrations</code>.</li>
       </ol>
@@ -351,7 +351,7 @@ export function createByoGhlOAuthRouter(options: ByoGhlOAuthOptions): Router {
   });
 
   router.post('/oauth/register', (req, res) => {
-    const clientId = `claude-${randomBytes(12).toString('hex')}`;
+    const clientId = `mcp-client-${randomBytes(12).toString('hex')}`;
     res.status(201).json({
       client_id: clientId,
       client_id_issued_at: Math.floor(Date.now() / 1000),
