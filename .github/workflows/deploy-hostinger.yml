@@ -153,4 +153,13 @@ jobs:
         if: steps.readiness.outputs.ready == 'true' && env.MCP_DOMAIN != ''
         run: |
           set -euo pipefail
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "https://$MCP_DOMAIN/health"; then
+              exit 0
+            fi
+
+            echo "Waiting for HTTPS route to become ready ($attempt/30)..."
+            sleep 5
+          done
+
           curl --fail --silent --show-error "https://$MCP_DOMAIN/health"
