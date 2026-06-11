@@ -6703,7 +6703,140 @@
     {
       "name": "get_sms_reports",
       "module": "reporting",
-      "description": "Get SMS performance reports",
+      "description": "Get SMS performance reports. If the aggregate HighLevel reporting endpoint is unavailable, falls back to exported conversation messages grouped by user/seller.",
+      "category": "analytics",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [
+        "startDate",
+        "endDate"
+      ],
+      "scopes": [],
+      "source": "local-tool-module",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "get_message_activity_by_user",
+      "module": "reporting",
+      "description": "Build a messages-by-seller report from exported conversation messages. Supports SMS, Email, WhatsApp, Call, or all channels and groups activity by the user/seller fields returned by HighLevel.",
+      "category": "analytics",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [
+        "startDate",
+        "endDate"
+      ],
+      "scopes": [],
+      "source": "local-tool-module",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "get_sms_activity_by_user",
+      "module": "reporting",
+      "description": "Build an SMS-by-seller report with sent, received, delivered, failed, and sample message details.",
+      "category": "analytics",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [
+        "startDate",
+        "endDate"
+      ],
+      "scopes": [],
+      "source": "local-tool-module",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "get_call_activity_by_user",
+      "module": "reporting",
+      "description": "Build a calls-by-user report from exported conversation call records with direction, status, contacts, conversations, and sample details.",
+      "category": "analytics",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [
+        "startDate",
+        "endDate"
+      ],
+      "scopes": [],
+      "source": "local-tool-module",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "get_whatsapp_activity_by_user",
+      "module": "reporting",
+      "description": "Build a WhatsApp-by-seller report with sent, received, delivered, failed, and sample message details.",
+      "category": "analytics",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [
+        "startDate",
+        "endDate"
+      ],
+      "scopes": [],
+      "source": "local-tool-module",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "get_email_activity_by_user",
+      "module": "reporting",
+      "description": "Build an email-by-seller report with sent, received, delivered, failed, and sample email message details.",
+      "category": "analytics",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [
+        "startDate",
+        "endDate"
+      ],
+      "scopes": [],
+      "source": "local-tool-module",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "get_pipeline_activity_by_user",
+      "module": "reporting",
+      "description": "Build a sales and pipeline report grouped by assigned user, including opportunity counts, values, statuses, stages, and samples.",
+      "category": "analytics",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [
+        "startDate",
+        "endDate"
+      ],
+      "scopes": [],
+      "source": "local-tool-module",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "get_contact_ownership_report",
+      "module": "reporting",
+      "description": "Build a contacts-by-user report showing how many contacts are assigned to each user, plus email/phone coverage and samples.",
+      "category": "analytics",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [],
+      "scopes": [],
+      "source": "local-tool-module",
+      "stability": "private-or-unstable"
+    },
+    {
+      "name": "get_user_business_report",
+      "module": "reporting",
+      "description": "Build a complete business performance report by user combining pipeline/sales, contacts, SMS, WhatsApp, email, and calls.",
       "category": "analytics",
       "access": "read",
       "destructive": false,
@@ -14132,6 +14265,78 @@
       "stability": "legacy-compatible"
     },
     {
+      "name": "crm_location_overview",
+      "module": "agentWorkspace",
+      "description": "Gather one compact, read-only operating overview for a GHL location: location profile, contacts, pipelines, calendars, products, and email activity.",
+      "category": "agent-workspace",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [],
+      "scopes": [],
+      "source": "curated-agent-workspace",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "crm_daily_briefing",
+      "module": "agentWorkspace",
+      "description": "Build a read-only daily operating briefing from recent contacts, opportunities, calendars, reviews, and email activity.",
+      "category": "agent-workspace",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [],
+      "scopes": [],
+      "source": "curated-agent-workspace",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "crm_search_everything",
+      "module": "agentWorkspace",
+      "description": "Search across contacts, conversations, opportunities, calendars, and products from one agent-friendly tool.",
+      "category": "agent-workspace",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [],
+      "scopes": [],
+      "source": "curated-agent-workspace",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "crm_get_next_page",
+      "module": "agentWorkspace",
+      "description": "Prepare the next read call for paginated tools without requiring the agent to remember cursor or searchAfter details.",
+      "category": "agent-workspace",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [],
+      "scopes": [],
+      "source": "curated-agent-workspace",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "crm_next_best_actions",
+      "module": "agentWorkspace",
+      "description": "Prepare a prioritized set of safe next actions from CRM context: follow-up task, note, message draft, and optional workflow enrollment.",
+      "category": "agent-workspace",
+      "access": "write",
+      "destructive": false,
+      "readOnly": false,
+      "idempotent": false,
+      "required": [
+        "contactId"
+      ],
+      "scopes": [],
+      "source": "curated-agent-workspace",
+      "stability": "legacy-compatible"
+    },
+    {
       "name": "crm_prepare_contact_update",
       "module": "agentWorkspace",
       "description": "Prepare a confirmation-gated contact update with duplicate checks, notes, tags, and follow-up task options.",
@@ -14141,6 +14346,22 @@
       "readOnly": false,
       "idempotent": false,
       "required": [],
+      "scopes": [],
+      "source": "curated-agent-workspace",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "crm_prepare_contact_followup",
+      "module": "agentWorkspace",
+      "description": "Prepare a contact follow-up bundle: context read, note, task, and optional SMS/email draft.",
+      "category": "agent-workspace",
+      "access": "write",
+      "destructive": false,
+      "readOnly": false,
+      "idempotent": false,
+      "required": [
+        "contactId"
+      ],
       "scopes": [],
       "source": "curated-agent-workspace",
       "stability": "legacy-compatible"
@@ -14225,6 +14446,22 @@
       "stability": "legacy-compatible"
     },
     {
+      "name": "crm_prepare_lead_reactivation",
+      "module": "agentWorkspace",
+      "description": "Prepare a dormant lead reactivation plan with tag, note, task, optional message, and optional workflow enrollment.",
+      "category": "agent-workspace",
+      "access": "write",
+      "destructive": false,
+      "readOnly": false,
+      "idempotent": false,
+      "required": [
+        "contactId"
+      ],
+      "scopes": [],
+      "source": "curated-agent-workspace",
+      "stability": "legacy-compatible"
+    },
+    {
       "name": "crm_conversation_workspace",
       "module": "agentWorkspace",
       "description": "Gather conversation threads, recent messages, and optional contact context for reply drafting.",
@@ -14273,6 +14510,22 @@
       "stability": "legacy-compatible"
     },
     {
+      "name": "crm_prepare_missed_call_response",
+      "module": "agentWorkspace",
+      "description": "Prepare a missed-call response with contact context, SMS draft, note, and follow-up task.",
+      "category": "agent-workspace",
+      "access": "write",
+      "destructive": false,
+      "readOnly": false,
+      "idempotent": false,
+      "required": [
+        "contactId"
+      ],
+      "scopes": [],
+      "source": "curated-agent-workspace",
+      "stability": "legacy-compatible"
+    },
+    {
       "name": "crm_pipeline_workspace",
       "module": "agentWorkspace",
       "description": "Gather pipeline, opportunity, and stale-deal context for a pipeline board.",
@@ -14310,6 +14563,22 @@
       "readOnly": false,
       "idempotent": false,
       "required": [],
+      "scopes": [],
+      "source": "curated-agent-workspace",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "crm_prepare_pipeline_cleanup",
+      "module": "agentWorkspace",
+      "description": "Prepare cleanup actions for stale pipeline opportunities: context read, stage/status update, notes, and follow-up tasks.",
+      "category": "agent-workspace",
+      "access": "write",
+      "destructive": false,
+      "readOnly": false,
+      "idempotent": false,
+      "required": [
+        "opportunityId"
+      ],
       "scopes": [],
       "source": "curated-agent-workspace",
       "stability": "legacy-compatible"
@@ -14459,6 +14728,22 @@
       "stability": "legacy-compatible"
     },
     {
+      "name": "crm_prepare_review_request_batch",
+      "module": "agentWorkspace",
+      "description": "Prepare review requests for multiple contacts with one confirmation-gated batch plan.",
+      "category": "agent-workspace",
+      "access": "write",
+      "destructive": false,
+      "readOnly": false,
+      "idempotent": false,
+      "required": [
+        "contactIds"
+      ],
+      "scopes": [],
+      "source": "curated-agent-workspace",
+      "stability": "legacy-compatible"
+    },
+    {
       "name": "crm_ads_workspace",
       "module": "agentWorkspace",
       "description": "Gather ads, attribution, funnel, conversion, and setup health reporting.",
@@ -14514,6 +14799,23 @@
       "readOnly": false,
       "idempotent": false,
       "required": [
+        "contactId"
+      ],
+      "scopes": [],
+      "source": "curated-agent-workspace",
+      "stability": "legacy-compatible"
+    },
+    {
+      "name": "crm_prepare_invoice_followup",
+      "module": "agentWorkspace",
+      "description": "Prepare an invoice follow-up with invoice context, contact note, task, and optional SMS/email reminder.",
+      "category": "agent-workspace",
+      "access": "write",
+      "destructive": false,
+      "readOnly": false,
+      "idempotent": false,
+      "required": [
+        "invoiceId",
         "contactId"
       ],
       "scopes": [],

@@ -156,6 +156,7 @@ Start agents with the curated profile and prefer these high-level tools before r
 - [Hostinger CI/CD](docs/HOSTINGER-CICD.md)
 - [Development](docs/DEVELOPMENT.md)
 - [API Coverage](docs/API-COVERAGE.md)
+- [Business Reporting](docs/GHL-BUSINESS-REPORTING.md)
 - [Companion Tooling](docs/TOOLING.md)
 
 ## Update History
@@ -170,7 +171,7 @@ Start agents with the curated profile and prefer these high-level tools before r
 - Official GHL endpoints parsed: `590`
 - Official endpoint coverage: `590 / 590`
 - Generated official endpoint tools: `238`
-- MCP tools in registry: `848`
+- MCP tools in registry: `867`
 - Local-only endpoint references tracked for review: `253`
 
 Generated coverage artifacts live in `docs/`. Run `npm run scan:ghl-api` only when intentionally refreshing API coverage.

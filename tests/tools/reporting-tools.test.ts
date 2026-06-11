@@ -138,4 +138,218 @@ describe('ReportingTools message activity fallback', () => {
       totalMessages: 1,
     }));
   });
+
+  it('builds a pipeline report grouped by assigned user', async () => {
+    const makeRequest = jest.fn(async (method: string, path: string) => {
+      if (path.startsWith('/users/search')) {
+        return {
+          success: true,
+          data: {
+            users: [
+              { id: 'user_1', firstName: 'Ada', lastName: 'Seller', email: 'ada@example.com' },
+            ],
+          },
+        };
+      }
+      if (method === 'POST' && path === '/opportunities/search') {
+        return {
+          success: true,
+          data: {
+            opportunities: [
+              {
+                id: 'opp_1',
+                assignedTo: 'user_1',
+                monetaryValue: 1200,
+                status: 'won',
+                pipelineName: 'Main Sales',
+                pipelineStageName: 'Closed Won',
+                createdAt: '2026-06-05T12:00:00.000Z',
+              },
+              {
+                id: 'opp_2',
+                assignedTo: { id: 'user_1', name: 'Ada Seller' },
+                value: '300',
+                status: 'open',
+                pipelineName: 'Main Sales',
+                pipelineStageName: 'Proposal',
+                createdAt: '2026-06-06T12:00:00.000Z',
+              },
+            ],
+          },
+        };
+      }
+      throw new Error(`Unexpected request: ${method} ${path}`);
+    });
+    const reportingTools = new ReportingTools({
+      getConfig: () => ({
+        accessToken: 'test',
+        baseUrl: 'https://services.leadconnectorhq.com',
+        version: '2023-02-21',
+        locationId: 'loc_123',
+      }),
+      makeRequest,
+    } as any);
+
+    const result = await reportingTools.handleToolCall('get_pipeline_activity_by_user', {
+      startDate: '2026-06-01',
+      endDate: '2026-06-11',
+    }) as any;
+
+    expect(result.success).toBe(true);
+    expect(result.totals.opportunities).toBe(2);
+    expect(result.totals.value).toBe(1500);
+    expect(result.users[0]).toEqual(expect.objectContaining({
+      userId: 'user_1',
+      totalOpportunities: 2,
+      won: 1,
+      open: 1,
+    }));
+    expect(makeRequest).toHaveBeenCalledWith(
+      'POST',
+      '/opportunities/search',
+      expect.objectContaining({ location_id: 'loc_123' }),
+      { version: '2021-07-28' },
+    );
+  });
+
+  it('builds a contact ownership report grouped by assigned user', async () => {
+    const makeRequest = jest.fn(async (_method: string, path: string) => {
+      if (path.startsWith('/users/search')) {
+        return { success: true, data: { users: [{ id: 'user_1', name: 'Ada Seller' }] } };
+      }
+      if (path.startsWith('/contacts/?')) {
+        return {
+          success: true,
+          data: {
+            contacts: [
+              { id: 'contact_1', assignedTo: 'user_1', firstName: 'Lead', email: 'lead@example.com', phone: '+1555000' },
+              { id: 'contact_2', assignedTo: 'user_1', firstName: 'No Email' },
+              { id: 'contact_3', firstName: 'Unassigned', email: 'none@example.com' },
+            ],
+          },
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    const reportingTools = new ReportingTools({
+      getConfig: () => ({
+        accessToken: 'test',
+        baseUrl: 'https://services.leadconnectorhq.com',
+        version: '2023-02-21',
+        locationId: 'loc_123',
+      }),
+      makeRequest,
+    } as any);
+
+    const result = await reportingTools.handleToolCall('get_contact_ownership_report', {
+      limit: 50,
+    }) as any;
+
+    expect(result.success).toBe(true);
+    expect(result.totals.contacts).toBe(3);
+    expect(result.totals.withEmail).toBe(2);
+    expect(result.totals.unassigned).toBe(1);
+    expect(result.owners).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        userId: 'user_1',
+        totalContacts: 2,
+        withEmail: 1,
+        withPhone: 1,
+      }),
+    ]));
+    expect(makeRequest).toHaveBeenCalledWith(
+      'GET',
+      expect.stringContaining('/contacts/?'),
+      undefined,
+      { version: '2021-07-28' },
+    );
+  });
+
+  it('builds a combined business report across pipeline, contacts, messages, WhatsApp, email, and calls', async () => {
+    const makeRequest = jest.fn(async (method: string, path: string) => {
+      if (path.startsWith('/users/search')) {
+        return {
+          success: true,
+          data: {
+            users: [
+              { id: 'user_1', firstName: 'Ada', lastName: 'Seller', email: 'ada@example.com' },
+            ],
+          },
+        };
+      }
+      if (method === 'POST' && path === '/opportunities/search') {
+        return {
+          success: true,
+          data: {
+            opportunities: [
+              { id: 'opp_1', assignedTo: 'user_1', value: 500, status: 'won', createdAt: '2026-06-05T12:00:00.000Z' },
+            ],
+          },
+        };
+      }
+      if (path.startsWith('/contacts/?')) {
+        return {
+          success: true,
+          data: {
+            contacts: [
+              { id: 'contact_1', assignedTo: 'user_1', email: 'lead@example.com', phone: '+1555000' },
+            ],
+          },
+        };
+      }
+      if (path.startsWith('/conversations/messages/export')) {
+        const channel = new URL(`https://example.test${path}`).searchParams.get('channel');
+        return {
+          success: true,
+          data: {
+            messages: [
+              {
+                id: `msg_${channel}`,
+                userId: 'user_1',
+                channel,
+                direction: 'outbound',
+                status: 'delivered',
+                createdAt: '2026-06-06T12:00:00.000Z',
+                body: `${channel} sample`,
+              },
+            ],
+          },
+        };
+      }
+      throw new Error(`Unexpected request: ${method} ${path}`);
+    });
+    const reportingTools = new ReportingTools({
+      getConfig: () => ({
+        accessToken: 'test',
+        baseUrl: 'https://services.leadconnectorhq.com',
+        version: '2023-02-21',
+        locationId: 'loc_123',
+      }),
+      makeRequest,
+    } as any);
+
+    const result = await reportingTools.handleToolCall('get_user_business_report', {
+      startDate: '2026-06-01',
+      endDate: '2026-06-11',
+      limitPerDataset: 25,
+    }) as any;
+
+    expect(result.success).toBe(true);
+    expect(result.totals.pipeline.opportunities).toBe(1);
+    expect(result.totals.contacts.contacts).toBe(1);
+    expect(result.totals.sms.messages).toBe(1);
+    expect(result.totals.whatsapp.messages).toBe(1);
+    expect(result.totals.email.messages).toBe(1);
+    expect(result.totals.calls.messages).toBe(1);
+    expect(result.users[0]).toEqual(expect.objectContaining({
+      userId: 'user_1',
+      userEmail: 'ada@example.com',
+      activityScore: 6,
+    }));
+    expect(result.users[0].pipeline.totalValue).toBe(500);
+    expect(result.users[0].sms.totalMessages).toBe(1);
+    expect(result.users[0].whatsapp.totalMessages).toBe(1);
+    expect(result.users[0].email.totalMessages).toBe(1);
+    expect(result.users[0].calls.totalMessages).toBe(1);
+  });
 });
