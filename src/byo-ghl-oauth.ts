@@ -116,6 +116,10 @@ function cleanupCodes(): void {
 function metadata(baseUrl: string) {
   return {
     issuer: baseUrl,
+    display_name: 'GoHighLevel MCP',
+    organization_name: 'GoHighLevel',
+    description: 'Connect Claude to a GoHighLevel sub-account with your Private Integration Token.',
+    logo_uri: `${baseUrl}/assets/ghl-icon.png`,
     authorization_endpoint: `${baseUrl}/oauth/authorize`,
     token_endpoint: `${baseUrl}/oauth/token`,
     registration_endpoint: `${baseUrl}/oauth/register`,
@@ -130,6 +134,11 @@ function metadata(baseUrl: string) {
 function protectedResourceMetadata(baseUrl: string) {
   return {
     resource: `${baseUrl}/mcp`,
+    resource_name: 'GoHighLevel MCP',
+    organization_name: 'GoHighLevel',
+    description: 'Remote MCP connector for GoHighLevel sub-accounts.',
+    logo_uri: `${baseUrl}/assets/ghl-icon.png`,
+    resource_documentation: baseUrl,
     authorization_servers: [baseUrl],
     scopes_supported: ['ghl:read', 'ghl:write'],
     bearer_methods_supported: ['header'],
@@ -148,6 +157,8 @@ function renderAuthorizeForm(params: URLSearchParams, error?: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Conectar GoHighLevel con Claude</title>
   <link rel="icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" href="/assets/ghl-icon.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <style>
     :root { color-scheme: light; }
     * { box-sizing: border-box; }
@@ -272,35 +283,34 @@ function renderAuthorizeForm(params: URLSearchParams, error?: string): string {
         <span class="badge">Claude MCP Connector</span>
       </div>
       <h1>Conecta GoHighLevel con Claude</h1>
-      <p class="intro">Usa los mismos nombres que ver&aacute;s en HighLevel: tu <strong>Private Integration Token</strong> y tu <strong>Location ID / Sub-account ID</strong>. Estos datos se cifran dentro del access token que Claude recibe para este conector.</p>
+      <p class="intro">Pega 2 datos de tu sub-account: <strong>Private Integration Token</strong> y <strong>Location ID</strong>. Claude recibir&aacute; un token cifrado para conectarse.</p>
       ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
       <form method="post" action="/oauth/authorize">
         ${hidden}
         <div class="field">
           <label for="ghl_api_key">Private Integration Token (PIT)</label>
           <input id="ghl_api_key" name="ghl_api_key" type="password" required autocomplete="off" placeholder="Pega el PIT de HighLevel">
-          <span class="hint">En HighLevel, abre el sub-account correcto y ve a <code>Settings</code> > <code>Private Integrations</code> > <code>Create New Integration</code>. Al crearla, copia el token una sola vez.</span>
+          <span class="hint"><code>Settings</code> > <code>Private Integrations</code> > <code>Create New Integration</code>.</span>
         </div>
 
         <div class="field">
           <label for="ghl_location_id">Location ID / Sub-account ID</label>
           <input id="ghl_location_id" name="ghl_location_id" type="text" required autocomplete="off" placeholder="Pega el Location ID">
-          <span class="hint">En el sub-account seleccionado, ve a <code>Settings</code> > <code>Business Profile</code>. Opci&oacute;n r&aacute;pida: copia el valor despu&eacute;s de <code>/location/</code> en la URL de HighLevel.</span>
+          <span class="hint"><code>Settings</code> > <code>Business Profile</code>, o copia el valor despu&eacute;s de <code>/location/</code> en la URL.</span>
         </div>
 
         <button type="submit">Autorizar conector GoHighLevel</button>
       </form>
-      <p class="security-note">Usa un token con permisos solo para el sub-account que Claude debe acceder. No pegues este token dentro de un chat de Claude.</p>
+      <p class="security-note">Usa un PIT con solo los permisos necesarios para ese sub-account.</p>
     </section>
     <section class="guide-panel" aria-label="HighLevel setup guide">
-      <h2>&iquest;D&oacute;nde consigo estos datos?</h2>
-      <p>Esta gu&iacute;a r&aacute;pida muestra la ruta dentro de HighLevel.</p>
+      <h2>Gu&iacute;a r&aacute;pida</h2>
+      <p>D&oacute;nde encontrar cada dato en HighLevel.</p>
       <img src="/assets/ghl-setup-guide.gif" alt="Guia animada para encontrar el Location ID y el Private Integration Token en HighLevel">
       <ol>
-        <li>Abre el sub-account exacto que Claude debe usar.</li>
-        <li>Copia el <strong>Location ID</strong> en <code>Settings</code> > <code>Business Profile</code>.</li>
-        <li>Crea el token en <code>Settings</code> > <code>Private Integrations</code>.</li>
-        <li>Selecciona solo los scopes necesarios, copia el token y p&eacute;galo aqu&iacute;.</li>
+        <li>Abre el sub-account que Claude usar&aacute;.</li>
+        <li>Copia el <strong>Location ID</strong> en <code>Business Profile</code>.</li>
+        <li>Crea el <strong>PIT</strong> en <code>Private Integrations</code>.</li>
       </ol>
     </section>
   </main>
@@ -320,6 +330,10 @@ export function createByoGhlOAuthRouter(options: ByoGhlOAuthOptions): Router {
     res.sendFile(path.join(PUBLIC_ASSETS_PATH, 'favicon.ico'));
   });
 
+  router.get(['/logo.png', '/icon.png', '/apple-touch-icon.png'], (_req, res) => {
+    res.sendFile(path.join(PUBLIC_ASSETS_PATH, 'ghl-icon.png'));
+  });
+
   router.get('/.well-known/oauth-authorization-server', (req, res) => {
     res.json(metadata(getPublicBaseUrl(req, options.publicBaseUrl)));
   });
@@ -329,6 +343,10 @@ export function createByoGhlOAuthRouter(options: ByoGhlOAuthOptions): Router {
   });
 
   router.get('/.well-known/oauth-protected-resource', (req, res) => {
+    res.json(protectedResourceMetadata(getPublicBaseUrl(req, options.publicBaseUrl)));
+  });
+
+  router.get('/.well-known/oauth-protected-resource/mcp', (req, res) => {
     res.json(protectedResourceMetadata(getPublicBaseUrl(req, options.publicBaseUrl)));
   });
 

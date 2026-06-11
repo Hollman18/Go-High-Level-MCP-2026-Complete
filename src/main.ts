@@ -70,6 +70,8 @@ async function main() {
   const registry = new ToolRegistry(ghlClient);
   const toolCount = registry.getToolCount();
   const startTime = Date.now();
+  const publicBaseUrl = (process.env.MCP_PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  const logoUri = publicBaseUrl ? `${publicBaseUrl}/assets/ghl-icon.png` : '/assets/ghl-icon.png';
 
   log('info', 'Initializing GHL MCP server', {
     baseUrl: config.baseUrl,
@@ -174,6 +176,10 @@ async function main() {
       name: 'GoHighLevel MCP Server',
       version: '2.0.0',
       status: 'running',
+      branding: {
+        logo_uri: logoUri,
+        icon_uri: logoUri,
+      },
       uptime: Math.floor((Date.now() - startTime) / 1000),
       endpoints: {
         health: '/health',
