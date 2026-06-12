@@ -54,7 +54,7 @@ Security features included:
 
 - Hosted MCP routes can require `Authorization: Bearer <token>`.
 - Public multi-user mode stores user-provided GHL credentials in encrypted sealed tokens.
-- CORS is restricted to known origins and configurable through `MCP_ALLOWED_ORIGINS`.
+- CORS defaults to public-agent mode for HTTPS MCP clients and can be locked down with `MCP_CORS_MODE=strict` plus `MCP_ALLOWED_ORIGINS`.
 - Express disables `x-powered-by`.
 - HTTP responses include basic hardening headers.
 - JSON and form bodies have size limits.

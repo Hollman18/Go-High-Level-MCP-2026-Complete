@@ -46,15 +46,41 @@ class GHLMCPHttpServer {
     this.app.use(cors({
       origin: (origin, callback) => {
         if (!origin) return callback(null, true);
-        if (/^https?:\/\/localhost(:\d+)?$/.test(origin) ||
-            origin === 'https://chatgpt.com' ||
-            origin === 'https://chat.openai.com') {
+        if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) {
           return callback(null, true);
         }
-        callback(new Error('CORS not allowed'));
+        if ((process.env.MCP_CORS_MODE || 'agent').toLowerCase() !== 'strict') {
+          try {
+            if (new URL(origin).protocol === 'https:') {
+              return callback(null, true);
+            }
+          } catch {
+            // Fall through to configured strict-origin check.
+          }
+        }
+        const allowedOrigins = new Set(
+          [
+            'https://claude.ai',
+            'https://claude.com',
+            'https://console.anthropic.com',
+            'https://chatgpt.com',
+            'https://chat.openai.com',
+            'https://platform.openai.com',
+            ...(process.env.MCP_ALLOWED_ORIGINS || '').split(',').map((value) => value.trim()).filter(Boolean),
+          ].map((value) => {
+            try {
+              const url = new URL(value);
+              return `${url.protocol}//${url.host}`;
+            } catch {
+              return value.replace(/\/$/, '');
+            }
+          })
+        );
+        callback(null, allowedOrigins.has(origin.replace(/\/$/, '')));
       },
       methods: ['GET', 'POST', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'mcp-session-id', 'Mcp-Session-Id', 'MCP-Protocol-Version', 'Last-Event-ID', 'X-Requested-With'],
+      exposedHeaders: ['mcp-session-id', 'Mcp-Session-Id'],
       credentials: true
     }));
     this.app.use(express.json({ limit: process.env.MCP_JSON_LIMIT || '1mb' }));
@@ -178,13 +204,6 @@ class GHLMCPHttpServer {
       });
     });
 
-    this.app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
-      if (err instanceof Error && err.message === 'CORS not allowed') {
-        res.status(403).json({ error: 'CORS origin not allowed' });
-        return;
-      }
-      next(err);
-    });
   }
 
   async start(): Promise<void> {

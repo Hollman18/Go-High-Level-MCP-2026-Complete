@@ -57,6 +57,10 @@ jobs:
       MCP_AUTH_TOKEN: ${{ secrets.MCP_AUTH_TOKEN }}
       MCP_PUBLIC_BASE_URL: ${{ secrets.MCP_PUBLIC_BASE_URL }}
       MCP_OAUTH_SECRET: ${{ secrets.MCP_OAUTH_SECRET }}
+      MCP_CORS_MODE: ${{ secrets.MCP_CORS_MODE || 'agent' }}
+      MCP_ALLOWED_ORIGINS: ${{ secrets.MCP_ALLOWED_ORIGINS }}
+      MCP_JSON_LIMIT: ${{ secrets.MCP_JSON_LIMIT || '1mb' }}
+      MCP_FORM_LIMIT: ${{ secrets.MCP_FORM_LIMIT || '256kb' }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout
@@ -104,7 +108,40 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$HOSTINGER_SSH_KEY" > ~/.ssh/hostinger_deploy_key
           chmod 600 ~/.ssh/hostinger_deploy_key
-          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          touch ~/.ssh/known_hosts
+
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -T 20 -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/tmp/ssh-keyscan.err; then
+              break
+            fi
+            echo "::warning::ssh-keyscan failed on attempt $attempt; retrying before falling back to StrictHostKeyChecking=accept-new"
+            cat /tmp/ssh-keyscan.err || true
+            sleep $((attempt * 5))
+          done
+
+          cat > ~/.ssh/config <<EOF
+          Host hostinger-vps
+            HostName $SSH_HOST
+            User $SSH_USER
+            Port $SSH_PORT
+            IdentityFile ~/.ssh/hostinger_deploy_key
+            StrictHostKeyChecking accept-new
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 30
+            ServerAliveInterval 15
+          EOF
+          chmod 600 ~/.ssh/config
+
+          for attempt in 1 2 3; do
+            if ssh hostinger-vps 'echo ssh-ok'; then
+              exit 0
+            fi
+            echo "::warning::SSH connection check failed on attempt $attempt; retrying"
+            sleep $((attempt * 10))
+          done
+
+          echo "::error::Unable to establish SSH connection to Hostinger after retries"
+          exit 1
         env:
           HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
 
@@ -129,6 +166,12 @@ jobs:
             if [ -n "${MCP_OAUTH_SECRET:-}" ]; then
               printf 'MCP_OAUTH_SECRET=%s\n' "$MCP_OAUTH_SECRET"
             fi
+            printf 'MCP_CORS_MODE=%s\n' "$MCP_CORS_MODE"
+            if [ -n "${MCP_ALLOWED_ORIGINS:-}" ]; then
+              printf 'MCP_ALLOWED_ORIGINS=%s\n' "$MCP_ALLOWED_ORIGINS"
+            fi
+            printf 'MCP_JSON_LIMIT=%s\n' "$MCP_JSON_LIMIT"
+            printf 'MCP_FORM_LIMIT=%s\n' "$MCP_FORM_LIMIT"
             if [ -n "${OPENAI_API_KEY:-}" ]; then
               printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY"
             fi
@@ -138,15 +181,15 @@ jobs:
         if: steps.readiness.outputs.ready == 'true'
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/hostinger_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "mkdir -p /tmp/ghl-mcp-deploy"
-          scp -i ~/.ssh/hostinger_deploy_key -P "$SSH_PORT" .deploy.env "$SSH_USER@$SSH_HOST:/tmp/ghl-mcp.env"
-          scp -i ~/.ssh/hostinger_deploy_key -P "$SSH_PORT" scripts/hostinger-deploy.sh "$SSH_USER@$SSH_HOST:/tmp/ghl-mcp-deploy/hostinger-deploy.sh"
+          ssh hostinger-vps "mkdir -p /tmp/ghl-mcp-deploy"
+          scp .deploy.env hostinger-vps:/tmp/ghl-mcp.env
+          scp scripts/hostinger-deploy.sh hostinger-vps:/tmp/ghl-mcp-deploy/hostinger-deploy.sh
 
       - name: Run remote deployment
         if: steps.readiness.outputs.ready == 'true'
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/hostinger_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+          ssh hostinger-vps \
             "REPO_URL='$REPO_URL' BRANCH='$BRANCH' DEPLOY_PATH='$DEPLOY_PATH' MCP_DOMAIN='$MCP_DOMAIN' CADDY_EMAIL='$CADDY_EMAIL' ENV_SOURCE='/tmp/ghl-mcp.env' bash /tmp/ghl-mcp-deploy/hostinger-deploy.sh"
 
       - name: Smoke test

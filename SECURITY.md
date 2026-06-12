@@ -56,7 +56,9 @@ Before exposing a hosted MCP endpoint:
 - Set `MCP_PUBLIC_BASE_URL` to the public HTTPS origin.
 - Set a long random `MCP_OAUTH_SECRET`; do not reuse your bearer token.
 - Set `MCP_AUTH_TOKEN` for remote MCP access.
-- Restrict browser origins with `MCP_ALLOWED_ORIGINS`.
+- Use the default `MCP_CORS_MODE=agent` for public MCP connectors, or set
+  `MCP_CORS_MODE=strict` and restrict browser origins with
+  `MCP_ALLOWED_ORIGINS` for private deployments.
 - Keep `MCP_JSON_LIMIT` and `MCP_FORM_LIMIT` small unless a specific workflow
   requires larger payloads.
 - Use HTTPS only.
@@ -73,7 +75,8 @@ The server includes these controls by default:
 
 - Optional bearer auth for hosted MCP routes.
 - BYO-GHL public connector mode with sealed user credentials.
-- CORS allowlisting with local development exceptions.
+- CORS support for public HTTPS agent clients, with strict allowlisting
+  available through `MCP_CORS_MODE=strict`.
 - Disabled `x-powered-by` Express header.
 - `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
   `Permissions-Policy`, and related response headers.

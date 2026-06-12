@@ -27,6 +27,8 @@ dotenv.config();
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://claude.ai',
+  'https://claude.com',
+  'https://console.anthropic.com',
   'https://chatgpt.com',
   'https://chat.openai.com',
   'https://platform.openai.com',
@@ -66,18 +68,38 @@ function createMcpServer(client: EnhancedGHLClient): McpServer {
 
 function configuredAllowedOrigins(publicBaseUrl: string): Set<string> {
   const origins = new Set(DEFAULT_ALLOWED_ORIGINS);
-  if (publicBaseUrl) origins.add(publicBaseUrl);
+  if (publicBaseUrl) origins.add(normalizeOrigin(publicBaseUrl));
   for (const origin of (process.env.MCP_ALLOWED_ORIGINS || '').split(',')) {
-    const trimmed = origin.trim().replace(/\/$/, '');
+    const trimmed = normalizeOrigin(origin.trim());
     if (trimmed) origins.add(trimmed);
   }
   return origins;
 }
 
+function normalizeOrigin(origin: string): string {
+  if (!origin) return '';
+  try {
+    const url = new URL(origin);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return origin.replace(/\/$/, '');
+  }
+}
+
 function isAllowedCorsOrigin(origin: string | undefined, allowedOrigins: Set<string>): boolean {
   if (!origin) return true;
-  if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) return true;
-  return allowedOrigins.has(origin.replace(/\/$/, ''));
+  const normalized = normalizeOrigin(origin);
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(normalized)) return true;
+  if (allowedOrigins.has(normalized)) return true;
+
+  const corsMode = (process.env.MCP_CORS_MODE || 'agent').toLowerCase();
+  if (corsMode === 'strict') return false;
+
+  try {
+    return new URL(normalized).protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function securityHeaders(): express.RequestHandler {
@@ -107,6 +129,7 @@ async function main() {
   const publicBaseUrl = (process.env.MCP_PUBLIC_BASE_URL || '').replace(/\/$/, '');
   const logoUri = publicBaseUrl ? `${publicBaseUrl}/logo.png` : '/logo.png';
   const allowedOrigins = configuredAllowedOrigins(publicBaseUrl);
+  const corsMode = (process.env.MCP_CORS_MODE || 'agent').toLowerCase();
 
   log('info', 'Initializing GHL MCP server', {
     baseUrl: config.baseUrl,
@@ -114,6 +137,7 @@ async function main() {
     locationId: config.locationId,
     tools: toolCount,
     authMode,
+    corsMode,
     allowedOrigins: [...allowedOrigins],
   });
 
@@ -131,10 +155,23 @@ async function main() {
         callback(null, true);
         return;
       }
-      callback(new Error('CORS origin not allowed'));
+      log('warn', 'CORS origin blocked', { origin });
+      callback(null, false);
     },
     methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'mcp-session-id', 'x-ghl-access-token', 'x-ghl-location-id'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'mcp-session-id',
+      'Mcp-Session-Id',
+      'MCP-Protocol-Version',
+      'Last-Event-ID',
+      'X-Requested-With',
+      'x-ghl-access-token',
+      'x-ghl-location-id',
+    ],
+    exposedHeaders: ['mcp-session-id', 'Mcp-Session-Id'],
     credentials: true,
   }));
   app.use(express.json({ limit: process.env.MCP_JSON_LIMIT || '1mb' }));
@@ -284,14 +321,6 @@ async function main() {
       log('error', `REST tool error: ${name}`, { error: err.message });
       res.status(500).json({ error: 'Tool execution failed' });
     }
-  });
-
-  app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
-    if (err instanceof Error && err.message === 'CORS origin not allowed') {
-      res.status(403).json({ error: 'CORS origin not allowed' });
-      return;
-    }
-    next(err);
   });
 
   app.listen(port, '0.0.0.0', () => {
