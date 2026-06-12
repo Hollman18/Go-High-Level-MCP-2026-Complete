@@ -7,6 +7,7 @@ import { GHLApiClient } from '../clients/ghl-api-client.js';
 
 type JsonRecord = Record<string, any>;
 type UserInfo = { id: string; name: string; email?: string };
+type DateWindow = { start?: number; end?: number };
 
 export class ReportingTools {
   constructor(private ghlClient: GHLApiClient) {}
@@ -929,9 +930,14 @@ export class ReportingTools {
     const progress: JsonRecord[] = [];
     const leaderMap = isRecord(args.leaderMap) ? args.leaderMap : {};
     const leaderField = stringArg(args.leaderField);
+    const dateWindow = buildDateWindow(args);
     const startedAt = new Date().toISOString();
     let scannedRecords = 0;
     let matchedRecords = 0;
+    let skippedBeforeRange = 0;
+    let skippedAfterRange = 0;
+    let undatedRecords = 0;
+    let reachedRecordsOlderThanStart = false;
     let stoppedBySafetyLimit = false;
 
     for (const channel of channels) {
@@ -954,6 +960,11 @@ export class ReportingTools {
         });
         const messages = pageData.messages;
         scannedRecords += messages.length;
+        let pageMatchedRecords = 0;
+        let pageSkippedBeforeRange = 0;
+        let pageSkippedAfterRange = 0;
+        let pageUndatedRecords = 0;
+        let pageReachedRecordsOlderThanStart = false;
 
         for (const item of messages) {
           if (scannedRecords > maxRecords) {
@@ -962,8 +973,23 @@ export class ReportingTools {
           }
           const message = isRecord(item) ? item : {};
           const normalized = normalizeHistoricalRecord(message, channel, userMap, leaderMap, leaderField);
+          const datePosition = classifyDatePosition(normalized.date, dateWindow);
+          if (datePosition === 'undated') {
+            undatedRecords++;
+            pageUndatedRecords++;
+          } else if (datePosition === 'before') {
+            skippedBeforeRange++;
+            pageSkippedBeforeRange++;
+            pageReachedRecordsOlderThanStart = true;
+            continue;
+          } else if (datePosition === 'after') {
+            skippedAfterRange++;
+            pageSkippedAfterRange++;
+            continue;
+          }
           if (!matchesUserFilter(filterUserIds, normalized.userId)) continue;
           matchedRecords++;
+          pageMatchedRecords++;
           addHistoricalRecord(totals, normalized, includeSamples);
           addHistoricalRecord(
             getOrCreateHistoricalBucket(byUser, normalized.userId, normalized.userName, normalized.userEmail),
@@ -983,10 +1009,19 @@ export class ReportingTools {
           channel,
           page,
           scanned: messages.length,
+          matched: pageMatchedRecords,
+          skippedBeforeRange: pageSkippedBeforeRange,
+          skippedAfterRange: pageSkippedAfterRange,
+          undated: pageUndatedRecords,
           cursorUsed: cursor,
           nextCursor,
         });
 
+        if (pageReachedRecordsOlderThanStart) {
+          reachedRecordsOlderThanStart = true;
+          cursor = nextCursor;
+          break;
+        }
         if (!nextCursor || messages.length === 0 || seenCursors.has(nextCursor)) {
           cursor = nextCursor;
           break;
@@ -1020,6 +1055,11 @@ export class ReportingTools {
       },
       scannedRecords,
       matchedRecords,
+      skippedRecords: {
+        beforeDateRange: skippedBeforeRange,
+        afterDateRange: skippedAfterRange,
+        undated: undatedRecords,
+      },
       stoppedBySafetyLimit,
       completed: !stoppedBySafetyLimit,
       generatedAt: new Date().toISOString(),
@@ -1040,10 +1080,13 @@ export class ReportingTools {
       pagination: {
         pagesScanned: progress.length,
         lastCursor: progress.length ? progress[progress.length - 1].nextCursor : undefined,
+        reachedRecordsOlderThanStart,
+        likelyDateWindowIncomplete: matchedRecords === 0 && scannedRecords > 0 && !stoppedBySafetyLimit && !reachedRecordsOlderThanStart && !progress.some((item) => item.nextCursor),
         progress,
       },
       notes: [
         'This tool automatically paginates HighLevel conversation message exports until the cursor ends or a safety limit is reached.',
+        'The MCP applies local date filtering because some HighLevel export surfaces may ignore startDate/endDate query parameters.',
         'For very large accounts, schedule this report in a VPS cron job and store the CSV/JSON output externally instead of asking the agent to print every row.',
         'Leader rollups require leaderMap or leaderField unless HighLevel returns a leader/manager field in the exported activity record.',
       ],
@@ -2404,6 +2447,27 @@ function isWithinRange(record: JsonRecord, args: Record<string, unknown>, datePa
     if (Number.isFinite(end) && time > end) return false;
   }
   return true;
+}
+
+function buildDateWindow(args: Record<string, unknown>): DateWindow {
+  const startDate = stringArg(args.startDate);
+  const endDate = stringArg(args.endDate);
+  const start = startDate ? Date.parse(startDate.includes('T') ? startDate : `${startDate}T00:00:00.000Z`) : undefined;
+  const end = endDate ? Date.parse(endDate.includes('T') ? endDate : `${endDate}T23:59:59.999Z`) : undefined;
+  return {
+    start: Number.isFinite(start) ? start : undefined,
+    end: Number.isFinite(end) ? end : undefined,
+  };
+}
+
+function classifyDatePosition(date: unknown, window: DateWindow): 'within' | 'before' | 'after' | 'undated' {
+  const raw = typeof date === 'string' || typeof date === 'number' ? String(date) : '';
+  if (!raw) return 'undated';
+  const time = Date.parse(raw);
+  if (!Number.isFinite(time)) return 'undated';
+  if (typeof window.start === 'number' && time < window.start) return 'before';
+  if (typeof window.end === 'number' && time > window.end) return 'after';
+  return 'within';
 }
 
 function readPath(root: unknown, path: string): unknown {

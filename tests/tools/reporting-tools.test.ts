@@ -625,4 +625,119 @@ describe('ReportingTools message activity fallback', () => {
     expect(result.pagination.pagesScanned).toBe(1);
     expect(makeRequest).toHaveBeenCalledTimes(2);
   });
+
+  it('locally filters historical records when HighLevel ignores the requested date window', async () => {
+    const makeRequest = jest.fn(async (_method: string, path: string) => {
+      if (path.startsWith('/users/search')) return { success: true, data: { users: [{ id: 'user_1', name: 'Ada Seller' }] } };
+      if (path.startsWith('/conversations/messages/export')) {
+        return {
+          success: true,
+          data: {
+            messages: [
+              {
+                id: 'recent_call_1',
+                userId: 'user_1',
+                channel: 'Call',
+                direction: 'outbound',
+                status: 'answered',
+                durationSeconds: 120,
+                createdAt: '2026-06-12T14:00:00.000Z',
+              },
+              {
+                id: 'recent_call_2',
+                userId: 'user_1',
+                channel: 'Call',
+                direction: 'outbound',
+                status: 'answered',
+                durationSeconds: 90,
+                createdAt: '2026-06-11T14:00:00.000Z',
+              },
+            ],
+          },
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    const reportingTools = new ReportingTools({
+      getConfig: () => ({
+        accessToken: 'test',
+        baseUrl: 'https://services.leadconnectorhq.com',
+        version: '2023-02-21',
+        locationId: 'loc_123',
+      }),
+      makeRequest,
+    } as any);
+
+    const result = await reportingTools.handleToolCall('generate_historical_activity_report', {
+      startDate: '2026-06-01',
+      endDate: '2026-06-10',
+      channel: 'Call',
+      includeDetails: true,
+    }) as any;
+
+    expect(result.scannedRecords).toBe(2);
+    expect(result.matchedRecords).toBe(0);
+    expect(result.totals.totalRecords).toBe(0);
+    expect(result.totals.call).toBe(0);
+    expect(result.details).toEqual([]);
+    expect(result.skippedRecords.afterDateRange).toBe(2);
+    expect(result.pagination.likelyDateWindowIncomplete).toBe(true);
+    expect(result.notes).toEqual(expect.arrayContaining([
+      expect.stringContaining('local date filtering'),
+    ]));
+  });
+
+  it('keeps paginating past newer records until it reaches the requested historical window', async () => {
+    const makeRequest = jest.fn(async (_method: string, path: string) => {
+      if (path.startsWith('/users/search')) return { success: true, data: { users: [{ id: 'user_1', name: 'Ada Seller' }] } };
+      if (path.startsWith('/conversations/messages/export')) {
+        const url = new URL(`https://example.test${path}`);
+        const cursor = url.searchParams.get('cursor');
+        if (!cursor) {
+          return {
+            success: true,
+            data: {
+              messages: [
+                { id: 'recent', userId: 'user_1', channel: 'Call', status: 'answered', createdAt: '2026-06-12T14:00:00.000Z' },
+              ],
+              nextCursor: 'older-page',
+            },
+          };
+        }
+        return {
+          success: true,
+          data: {
+            messages: [
+              { id: 'historical', userId: 'user_1', channel: 'Call', status: 'answered', durationSeconds: 60, createdAt: '2026-06-05T14:00:00.000Z' },
+            ],
+          },
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    const reportingTools = new ReportingTools({
+      getConfig: () => ({
+        accessToken: 'test',
+        baseUrl: 'https://services.leadconnectorhq.com',
+        version: '2023-02-21',
+        locationId: 'loc_123',
+      }),
+      makeRequest,
+    } as any);
+
+    const result = await reportingTools.handleToolCall('generate_historical_activity_report', {
+      startDate: '2026-06-01',
+      endDate: '2026-06-10',
+      channel: 'Call',
+      includeDetails: true,
+    }) as any;
+
+    expect(result.scannedRecords).toBe(2);
+    expect(result.matchedRecords).toBe(1);
+    expect(result.skippedRecords.afterDateRange).toBe(1);
+    expect(result.totals.call).toBe(1);
+    expect(result.details[0].id).toBe('historical');
+    expect(result.pagination.pagesScanned).toBe(2);
+    expect(result.pagination.likelyDateWindowIncomplete).toBe(false);
+  });
 });
