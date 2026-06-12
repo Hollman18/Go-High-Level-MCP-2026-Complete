@@ -6847,7 +6847,7 @@
         "endDate"
       ],
       "scopes": [],
-      "source": "local-tool-module",
+      "source": "curated-business-report",
       "stability": "legacy-compatible"
     },
     {
@@ -6864,8 +6864,8 @@
         "endDate"
       ],
       "scopes": [],
-      "source": "local-tool-module",
-      "stability": "private-or-unstable"
+      "source": "curated-business-report",
+      "stability": "legacy-compatible"
     },
     {
       "name": "get_value_ladder_info_product_report",
@@ -11919,25 +11919,6 @@
       "operationId": "remove-contact-from-every-campaign"
     },
     {
-      "name": "official_contacts_get_contacts",
-      "module": "officialSpec",
-      "description": "Get Contacts Official GHL API endpoint: GET /contacts/. Version: 2021-07-28. Scopes: contacts.readonly. Uses configured locationId when omitted.",
-      "category": "official-contacts",
-      "access": "read",
-      "destructive": false,
-      "readOnly": true,
-      "idempotent": true,
-      "required": [],
-      "scopes": [
-        "contacts.readonly"
-      ],
-      "source": "official-ghl-openapi",
-      "stability": "official",
-      "method": "GET",
-      "path": "/contacts/",
-      "operationId": "get-contacts"
-    },
-    {
       "name": "official_conversation_ai_create_action",
       "module": "officialSpec",
       "description": "Attach Action to Agent Official GHL API endpoint: POST /conversation-ai/agents/{agentId}/actions. Version: 2021-04-15. Scopes: conversation-ai.write.",
@@ -12277,25 +12258,6 @@
       "method": "POST",
       "path": "/conversations/preferences/unsubscriptions/user-change",
       "operationId": "user-subscription-change"
-    },
-    {
-      "name": "official_conversations_export_messages_by_location",
-      "module": "officialSpec",
-      "description": "Export messages by location ID Official GHL API endpoint: GET /conversations/messages/export. Version: 2021-04-15. Scopes: conversations/message.readonly. Uses configured locationId when omitted.",
-      "category": "official-conversations",
-      "access": "read",
-      "destructive": false,
-      "readOnly": true,
-      "idempotent": true,
-      "required": [],
-      "scopes": [
-        "conversations/message.readonly"
-      ],
-      "source": "official-ghl-openapi",
-      "stability": "official",
-      "method": "GET",
-      "path": "/conversations/messages/export",
-      "operationId": "export-messages-by-location"
     },
     {
       "name": "official_conversations_send_review_reply",
@@ -12984,25 +12946,6 @@
       "method": "GET",
       "path": "/opportunities/lost-reason",
       "operationId": "get-lost-reason"
-    },
-    {
-      "name": "official_opportunities_search_opportunities_advanced",
-      "module": "officialSpec",
-      "description": "Search Opportunities Official GHL API endpoint: POST /opportunities/search. Version: 2021-07-28. Scopes: opportunities.readonly.",
-      "category": "official-opportunities",
-      "access": "write",
-      "destructive": false,
-      "readOnly": false,
-      "idempotent": false,
-      "required": [],
-      "scopes": [
-        "opportunities.readonly"
-      ],
-      "source": "official-ghl-openapi",
-      "stability": "official",
-      "method": "POST",
-      "path": "/opportunities/search",
-      "operationId": "search-opportunities-advanced"
     },
     {
       "name": "official_payments_custom_provider_marketplace_app_update_9a8c6e",

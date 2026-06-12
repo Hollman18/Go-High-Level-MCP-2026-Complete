@@ -9,18 +9,18 @@ Generated from official GHL docs commit: ae4d260
 - Official endpoints parsed: 590
 - Official endpoints covered: 590
 - Coverage: 100%
-- MCP tools in registry: 869
-- Read tools: 433
-- Write tools: 328
+- MCP tools in registry: 866
+- Read tools: 431
+- Write tools: 327
 - Delete/destructive tools: 108
 - Local-only endpoint references tracked: 253
 
 ## Stability Tiers
 
-- Official OpenAPI tools: 237
+- Official OpenAPI tools: 234
 - Live-docs supplemental tools: 14
-- Legacy-compatible tools: 505
-- Private/internal unstable tools: 89
+- Legacy-compatible tools: 506
+- Private/internal unstable tools: 88
 - Deprecated/compatibility tools: 24
 
 ## Largest Tool Categories

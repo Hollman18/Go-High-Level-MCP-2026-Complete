@@ -30,9 +30,10 @@ This project is not affiliated with or endorsed by GoHighLevel. GoHighLevel, Hig
 
 - Official GHL endpoints parsed: `590`
 - Official endpoint coverage: `590 / 590`
-- Generated official endpoint tools: `238`
-- MCP tools in registry: `869`
-- Reporting tools: `22`
+- Generated official OpenAPI tools: `234`
+- Live-docs supplemental tools: `14`
+- MCP tools in registry: `866`
+- Reporting and analytics tools: `22`
 - Node.js: `>=20`, tested with Node 22
 - License: see [LICENSE](LICENSE)
 

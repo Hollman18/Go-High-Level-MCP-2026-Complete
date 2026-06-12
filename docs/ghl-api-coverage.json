@@ -12997,6 +12997,54 @@
         "caller": "makeRequest"
       },
       {
+        "key": "GET /conversations/messages/export",
+        "method": "GET",
+        "path": "/conversations/messages/export",
+        "normalizedPath": "/conversations/messages/export",
+        "sourceFile": "src/tools/reporting-tools.ts",
+        "caller": "makeRequest"
+      },
+      {
+        "key": "POST /opportunities/search",
+        "method": "POST",
+        "path": "/opportunities/search",
+        "normalizedPath": "/opportunities/search",
+        "sourceFile": "src/tools/reporting-tools.ts",
+        "caller": "makeRequest"
+      },
+      {
+        "key": "GET /opportunities/search",
+        "method": "GET",
+        "path": "/opportunities/search",
+        "normalizedPath": "/opportunities/search",
+        "sourceFile": "src/tools/reporting-tools.ts",
+        "caller": "makeRequest"
+      },
+      {
+        "key": "GET /contacts",
+        "method": "GET",
+        "path": "/contacts/",
+        "normalizedPath": "/contacts",
+        "sourceFile": "src/tools/reporting-tools.ts",
+        "caller": "makeRequest"
+      },
+      {
+        "key": "POST /contacts/search",
+        "method": "POST",
+        "path": "/contacts/search",
+        "normalizedPath": "/contacts/search",
+        "sourceFile": "src/tools/reporting-tools.ts",
+        "caller": "makeRequest"
+      },
+      {
+        "key": "GET /users/search",
+        "method": "GET",
+        "path": "/users/search",
+        "normalizedPath": "/users/search",
+        "sourceFile": "src/tools/reporting-tools.ts",
+        "caller": "makeRequest"
+      },
+      {
         "key": "GET /reputation/reviews",
         "method": "GET",
         "path": "/reputation/reviews",
@@ -14925,14 +14973,6 @@
         "caller": "official-spec-generated"
       },
       {
-        "key": "GET /contacts",
-        "method": "GET",
-        "path": "/contacts/",
-        "normalizedPath": "/contacts",
-        "sourceFile": "src/tools/official-spec-endpoints.json",
-        "caller": "official-spec-generated"
-      },
-      {
         "key": "POST /conversation-ai/agents/{}/actions",
         "method": "POST",
         "path": "/conversation-ai/agents/{agentId}/actions",
@@ -15065,14 +15105,6 @@
         "method": "POST",
         "path": "/conversations/preferences/unsubscriptions/user-change",
         "normalizedPath": "/conversations/preferences/unsubscriptions/user-change",
-        "sourceFile": "src/tools/official-spec-endpoints.json",
-        "caller": "official-spec-generated"
-      },
-      {
-        "key": "GET /conversations/messages/export",
-        "method": "GET",
-        "path": "/conversations/messages/export",
-        "normalizedPath": "/conversations/messages/export",
         "sourceFile": "src/tools/official-spec-endpoints.json",
         "caller": "official-spec-generated"
       },
@@ -15361,14 +15393,6 @@
         "method": "GET",
         "path": "/opportunities/lost-reason",
         "normalizedPath": "/opportunities/lost-reason",
-        "sourceFile": "src/tools/official-spec-endpoints.json",
-        "caller": "official-spec-generated"
-      },
-      {
-        "key": "POST /opportunities/search",
-        "method": "POST",
-        "path": "/opportunities/search",
-        "normalizedPath": "/opportunities/search",
         "sourceFile": "src/tools/official-spec-endpoints.json",
         "caller": "official-spec-generated"
       },
@@ -15861,7 +15885,7 @@
         "caller": "official-spec-generated"
       }
     ],
-    "filesScanned": 59
+    "filesScanned": 61
   },
   "comparison": {
     "coveredCount": 590,
