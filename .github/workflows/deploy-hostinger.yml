@@ -14,12 +14,13 @@ jobs:
   test:
     name: Build and test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -37,6 +38,7 @@ jobs:
     name: Deploy VPS
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.ref == 'refs/heads/main'
     environment: production
     env:
@@ -64,7 +66,7 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check deployment secrets
         id: readiness
@@ -103,6 +105,7 @@ jobs:
 
       - name: Prepare SSH
         if: steps.readiness.outputs.ready == 'true'
+        timeout-minutes: 4
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
@@ -111,7 +114,7 @@ jobs:
           touch ~/.ssh/known_hosts
 
           for attempt in 1 2 3 4 5; do
-            if ssh-keyscan -T 20 -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/tmp/ssh-keyscan.err; then
+            if timeout 25s ssh-keyscan -T 20 -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/tmp/ssh-keyscan.err; then
               break
             fi
             echo "::warning::ssh-keyscan failed on attempt $attempt; retrying before falling back to StrictHostKeyChecking=accept-new"
@@ -119,21 +122,26 @@ jobs:
             sleep $((attempt * 5))
           done
 
-          cat > ~/.ssh/config <<EOF
-          Host hostinger-vps
-            HostName $SSH_HOST
-            User $SSH_USER
-            Port $SSH_PORT
-            IdentityFile ~/.ssh/hostinger_deploy_key
-            StrictHostKeyChecking accept-new
-            UserKnownHostsFile ~/.ssh/known_hosts
-            ConnectTimeout 30
-            ServerAliveInterval 15
-          EOF
+          {
+            printf 'Host hostinger-vps\n'
+            printf '  HostName %s\n' "$SSH_HOST"
+            printf '  User %s\n' "$SSH_USER"
+            printf '  Port %s\n' "$SSH_PORT"
+            printf '  IdentityFile ~/.ssh/hostinger_deploy_key\n'
+            printf '  IdentitiesOnly yes\n'
+            printf '  BatchMode yes\n'
+            printf '  StrictHostKeyChecking accept-new\n'
+            printf '  UserKnownHostsFile ~/.ssh/known_hosts\n'
+            printf '  ConnectTimeout 20\n'
+            printf '  ConnectionAttempts 1\n'
+            printf '  ServerAliveInterval 15\n'
+            printf '  ServerAliveCountMax 2\n'
+            printf '  LogLevel ERROR\n'
+          } > ~/.ssh/config
           chmod 600 ~/.ssh/config
 
           for attempt in 1 2 3; do
-            if ssh hostinger-vps 'echo ssh-ok'; then
+            if timeout 45s ssh hostinger-vps 'echo ssh-ok'; then
               exit 0
             fi
             echo "::warning::SSH connection check failed on attempt $attempt; retrying"
@@ -179,25 +187,28 @@ jobs:
 
       - name: Copy deployment files
         if: steps.readiness.outputs.ready == 'true'
+        timeout-minutes: 3
         run: |
           set -euo pipefail
-          ssh hostinger-vps "mkdir -p /tmp/ghl-mcp-deploy"
-          scp .deploy.env hostinger-vps:/tmp/ghl-mcp.env
-          scp scripts/hostinger-deploy.sh hostinger-vps:/tmp/ghl-mcp-deploy/hostinger-deploy.sh
+          timeout 45s ssh hostinger-vps "mkdir -p /tmp/ghl-mcp-deploy"
+          timeout 45s scp .deploy.env hostinger-vps:/tmp/ghl-mcp.env
+          timeout 45s scp scripts/hostinger-deploy.sh hostinger-vps:/tmp/ghl-mcp-deploy/hostinger-deploy.sh
 
       - name: Run remote deployment
         if: steps.readiness.outputs.ready == 'true'
+        timeout-minutes: 10
         run: |
           set -euo pipefail
-          ssh hostinger-vps \
+          timeout 9m ssh hostinger-vps \
             "REPO_URL='$REPO_URL' BRANCH='$BRANCH' DEPLOY_PATH='$DEPLOY_PATH' MCP_DOMAIN='$MCP_DOMAIN' CADDY_EMAIL='$CADDY_EMAIL' ENV_SOURCE='/tmp/ghl-mcp.env' bash /tmp/ghl-mcp-deploy/hostinger-deploy.sh"
 
       - name: Smoke test
         if: steps.readiness.outputs.ready == 'true' && env.MCP_DOMAIN != ''
+        timeout-minutes: 4
         run: |
           set -euo pipefail
           for attempt in {1..30}; do
-            if curl --fail --silent --show-error "https://$MCP_DOMAIN/health"; then
+            if curl --connect-timeout 10 --max-time 20 --fail --silent --show-error "https://$MCP_DOMAIN/health"; then
               exit 0
             fi
 
@@ -205,4 +216,4 @@ jobs:
             sleep 5
           done
 
-          curl --fail --silent --show-error "https://$MCP_DOMAIN/health"
+          curl --connect-timeout 10 --max-time 20 --fail --silent --show-error "https://$MCP_DOMAIN/health"
