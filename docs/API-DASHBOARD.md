@@ -9,8 +9,8 @@ Generated from official GHL docs commit: ae4d260
 - Official endpoints parsed: 590
 - Official endpoints covered: 590
 - Coverage: 100%
-- MCP tools in registry: 867
-- Read tools: 431
+- MCP tools in registry: 869
+- Read tools: 433
 - Write tools: 328
 - Delete/destructive tools: 108
 - Local-only endpoint references tracked: 253
@@ -19,8 +19,8 @@ Generated from official GHL docs commit: ae4d260
 
 - Official OpenAPI tools: 237
 - Live-docs supplemental tools: 14
-- Legacy-compatible tools: 504
-- Private/internal unstable tools: 88
+- Legacy-compatible tools: 505
+- Private/internal unstable tools: 89
 - Deprecated/compatibility tools: 24
 
 ## Largest Tool Categories
@@ -35,10 +35,10 @@ Generated from official GHL docs commit: ae4d260
 | locations | 27 |
 | official-social-media-posting | 24 |
 | payments | 22 |
+| analytics | 22 |
 | official-saas-api | 21 |
 | conversations | 20 |
 | phone-numbers | 20 |
-| analytics | 20 |
 | social-media | 19 |
 | invoices | 18 |
 | templates | 18 |

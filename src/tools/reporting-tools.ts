@@ -349,6 +349,64 @@ export class ReportingTools {
           labels: {
             category: "analytics",
             access: "read",
+            complexity: "workflow",
+            source: "curated-business-report",
+            stability: "legacy-compatible"
+          }
+        }
+      },
+      {
+        name: 'get_saas_subscription_report',
+        description: 'Build a SaaS subscription sales report for closers, setters, sales leaders, and management, including pipeline, calls, SMS, WhatsApp, email, contacts, and SaaS KPI use cases.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            locationId: { type: 'string', description: 'Location ID' },
+            startDate: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+            endDate: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+            pipelineId: { type: 'string', description: 'Filter sales metrics by SaaS pipeline ID' },
+            status: { type: 'string', enum: ['open', 'won', 'lost', 'abandoned', 'all'], description: 'Pipeline status filter', default: 'all' },
+            userId: { type: 'string', description: 'Only include one user' },
+            userIds: { type: 'array', items: { type: 'string' }, description: 'Only include these users' },
+            limitPerDataset: { type: 'number', description: 'Records to scan per dataset (10-500, default 100)', minimum: 10, maximum: 500 },
+            includeSamples: { type: 'boolean', description: 'Include sample records in each section', default: true },
+            includeUseCaseMap: { type: 'boolean', description: 'Include the full SaaS reporting use-case map', default: true },
+          },
+          required: ['startDate', 'endDate']
+        },
+        _meta: {
+          labels: {
+            category: "analytics",
+            access: "read",
+            complexity: "workflow",
+            source: "curated-business-report",
+            stability: "legacy-compatible"
+          }
+        }
+      },
+      {
+        name: 'get_value_ladder_info_product_report',
+        description: 'Build a Value Ladder info-product sales report for masterclass/webinar, workshop, lead magnet, entry offer, and high-ticket pipelines with seller, sales leader, and management views.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            locationId: { type: 'string', description: 'Location ID' },
+            startDate: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+            endDate: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+            pipelineId: { type: 'string', description: 'Filter sales metrics by Value Ladder pipeline ID' },
+            status: { type: 'string', enum: ['open', 'won', 'lost', 'abandoned', 'all'], description: 'Pipeline status filter', default: 'all' },
+            userId: { type: 'string', description: 'Only include one user' },
+            userIds: { type: 'array', items: { type: 'string' }, description: 'Only include these users' },
+            limitPerDataset: { type: 'number', description: 'Records to scan per dataset (10-500, default 100)', minimum: 10, maximum: 500 },
+            includeSamples: { type: 'boolean', description: 'Include sample records in each section', default: true },
+            includeUseCaseMap: { type: 'boolean', description: 'Include the full Value Ladder reporting use-case map', default: true },
+          },
+          required: ['startDate', 'endDate']
+        },
+        _meta: {
+          labels: {
+            category: "analytics",
+            access: "read",
             complexity: "workflow"
           }
         }
@@ -594,6 +652,12 @@ export class ReportingTools {
       case 'get_user_business_report': {
         return this.buildUserBusinessReport(args, locationId);
       }
+      case 'get_saas_subscription_report': {
+        return this.buildVerticalBusinessReport(args, locationId, SAAS_SUBSCRIPTION_REPORT_MODEL);
+      }
+      case 'get_value_ladder_info_product_report': {
+        return this.buildVerticalBusinessReport(args, locationId, VALUE_LADDER_REPORT_MODEL);
+      }
       case 'get_funnel_reports': {
         const params = new URLSearchParams();
         params.append('locationId', locationId);
@@ -687,8 +751,11 @@ export class ReportingTools {
       whatsapp: 0,
       call: 0,
       other: 0,
+      effective: 0,
+      nonEffective: 0,
       delivered: 0,
       failed: 0,
+      periods: emptyActivityPeriods(),
     };
 
     for (const item of messages) {
@@ -724,6 +791,8 @@ export class ReportingTools {
       const messageChannel = normalizeChannel(firstString(message, ['channel', 'type', 'messageType', 'message_type']) || channel);
       const direction = normalizeDirection(firstString(message, ['direction', 'messageDirection', 'source', 'status']));
       const status = String(firstString(message, ['status', 'deliveryStatus', 'messageStatus']) || '').toLowerCase();
+      const date = firstString(message, ['date', 'createdAt', 'created_at', 'dateAdded']);
+      const effectiveness = classifyEffectiveness(status, messageChannel);
 
       bucket.totalMessages++;
       totals.messages++;
@@ -746,14 +815,24 @@ export class ReportingTools {
         bucket.failed++;
         totals.failed++;
       }
+      if (effectiveness === 'effective') {
+        bucket.effective++;
+        totals.effective++;
+      } else if (effectiveness === 'nonEffective') {
+        bucket.nonEffective++;
+        totals.nonEffective++;
+      }
+      incrementActivityPeriods(bucket.periods, date, messageChannel, direction, effectiveness);
+      incrementActivityPeriods(totals.periods, date, messageChannel, direction, effectiveness);
 
       if (includeSamples && bucket.samples.length < 3) {
         bucket.samples.push({
           id: firstString(message, ['id', 'messageId', '_id']),
-          date: firstString(message, ['date', 'createdAt', 'created_at', 'dateAdded']),
+          date,
           channel: messageChannel,
           direction,
           status: status || undefined,
+          effectiveness,
           contactId: firstString(message, ['contactId', 'contact.id']),
           conversationId: firstString(message, ['conversationId', 'conversation.id']),
           preview: preview(firstString(message, ['body', 'message', 'text', 'content', 'lastMessageBody']) || ''),
@@ -762,6 +841,8 @@ export class ReportingTools {
     }
 
     const sellers = [...byUser.values()].sort((a, b) => b.totalMessages - a.totalMessages);
+    for (const seller of sellers) seller.averages = buildPeriodAverages(seller.periods);
+    const averages = buildPeriodAverages(totals.periods);
     const nextCursor = firstString(responseData, ['nextCursor', 'cursor.next', 'meta.nextCursor', 'pagination.nextCursor']);
 
     return {
@@ -779,6 +860,7 @@ export class ReportingTools {
       limit,
       nextCursor,
       totals,
+      averages,
       sellers,
       notes: [
         'This report is built from the official conversations messages export endpoint, not from /reporting/sms.',
@@ -1111,6 +1193,34 @@ export class ReportingTools {
     };
   }
 
+  private async buildVerticalBusinessReport(
+    args: Record<string, unknown>,
+    locationId: string,
+    reportModel: JsonRecord
+  ): Promise<unknown> {
+    const businessReport = await this.buildUserBusinessReport(args, locationId) as JsonRecord;
+    const includeUseCaseMap = args.includeUseCaseMap !== false;
+
+    return {
+      ...businessReport,
+      source: reportModel.source,
+      reportModel: {
+        type: reportModel.type,
+        name: reportModel.name,
+        audience: reportModel.audience,
+        funnelOrRevenueModel: reportModel.funnelOrRevenueModel,
+      },
+      useCaseMap: includeUseCaseMap ? reportModel.useCaseMap : undefined,
+      kpiDefinitions: reportModel.kpiDefinitions,
+      roleViews: reportModel.roleViews,
+      recommendedPrompts: reportModel.recommendedPrompts,
+      notes: [
+        ...(businessReport.notes || []),
+        ...reportModel.notes,
+      ],
+    };
+  }
+
   private async fetchOpportunities(
     args: Record<string, unknown>,
     locationId: string,
@@ -1194,6 +1304,204 @@ export class ReportingTools {
   }
 }
 
+const COMMON_SALES_REPORT_KPIS = [
+  'Total activities by user: calls, SMS, WhatsApp, email, and assigned contacts.',
+  'Effective vs non-effective communication by channel and user.',
+  'Daily, monthly, and yearly totals and averages for calls and messages.',
+  'Open, won, lost, abandoned, and unclassified pipeline by seller.',
+  'Pipeline value, closed value, stage distribution, and owner distribution.',
+  'Unassigned records that require CRM hygiene or routing fixes.',
+];
+
+const SAAS_SUBSCRIPTION_REPORT_MODEL: JsonRecord = {
+  type: 'saas_subscription',
+  name: 'SaaS subscription sales reporting',
+  source: 'saas_subscription_report',
+  audience: ['setter', 'closer', 'sales_manager', 'executive_management'],
+  funnelOrRevenueModel: [
+    'lead capture',
+    'qualification',
+    'demo booked',
+    'demo attended',
+    'trial or pilot',
+    'proposal',
+    'closed won subscription',
+    'closed lost',
+    'expansion or renewal',
+  ],
+  kpiDefinitions: [
+    ...COMMON_SALES_REPORT_KPIS,
+    'Setter KPIs: leads contacted, conversations started, demos booked, no-shows, handoff quality, response speed proxy through outbound/inbound mix.',
+    'Closer KPIs: demos handled, opportunities won/lost, pipeline value, close rate proxy, follow-up activity, stalled opportunities.',
+    'SaaS revenue KPIs: new subscription bookings, pipeline MRR/ARR proxy from opportunity value, renewal or expansion pipeline when stages/tags identify it.',
+  ],
+  roleViews: {
+    seller: [
+      'My daily, monthly, and yearly calls, SMS, WhatsApp, and email totals.',
+      'My effective vs non-effective calls and messages.',
+      'My open pipeline, won opportunities, lost opportunities, and next follow-up workload.',
+      'My assigned contacts with and without email/phone coverage.',
+      'My activity gaps by day and channel.',
+    ],
+    salesLeader: [
+      'Leaderboard of setters and closers by activity, effective conversations, and pipeline created or closed.',
+      'Pipeline health by user, stage, status, and value.',
+      'Call, SMS, WhatsApp, and email consistency by day, month, and year.',
+      'Users with many activities but low won value, and users with pipeline but low follow-up activity.',
+      'Unassigned contacts, messages, and opportunities that need cleanup.',
+    ],
+    management: [
+      'Team production summary by period: activity, pipeline value, won value, and lost value.',
+      'SaaS funnel visibility from lead/contact ownership through demo, proposal, closed won, and expansion stages.',
+      'Channel productivity: calls vs SMS vs WhatsApp vs email contribution by team and user.',
+      'Forecast risk: open pipeline value, stage concentration, and inactive users.',
+      'Operational quality: missing ownership, failed messages, non-effective calls, and contact data completeness.',
+    ],
+  },
+  useCaseMap: {
+    seller: {
+      dailyExecution: [
+        'What did I do today by channel?',
+        'Which calls or messages were not effective?',
+        'Which open opportunities need follow-up?',
+        'Which assigned contacts have no email or phone?',
+      ],
+      pipelineOwnership: [
+        'How much open subscription pipeline do I own?',
+        'What did I win or lose in this period?',
+        'Which stages are overloaded or stalled?',
+      ],
+    },
+    salesLeader: {
+      coaching: [
+        'Who is calling enough but not generating effective conversations?',
+        'Who has low follow-up activity relative to pipeline value?',
+        'Which sellers have the best channel mix?',
+      ],
+      operations: [
+        'How many contacts or opportunities are unassigned?',
+        'Which users have failed outbound messages?',
+        'Where are demos, trials, proposals, and closes concentrated?',
+      ],
+    },
+    management: {
+      growth: [
+        'How much pipeline and won subscription value exists by user?',
+        'Which acquisition channel or communication channel supports sales activity?',
+        'What is the team trend by day, month, and year?',
+      ],
+      risk: [
+        'Where is the forecast concentrated?',
+        'Which users or stages need intervention?',
+        'How much sales activity is non-effective?',
+      ],
+    },
+  },
+  recommendedPrompts: [
+    'Build a SaaS sales report by closer and setter for this month with calls, SMS, WhatsApp, emails, contacts, and pipeline.',
+    'Show effective and non-effective calls by seller and the daily average for the period.',
+    'Compare pipeline value and follow-up activity by user for my subscription sales team.',
+  ],
+  notes: [
+    'For SaaS-specific MRR or ARR, map opportunity value/custom fields to subscription value in your CRM conventions.',
+    'Setter vs closer segmentation depends on user IDs, teams, pipeline stages, tags, or naming conventions available in HighLevel.',
+  ],
+};
+
+const VALUE_LADDER_REPORT_MODEL: JsonRecord = {
+  type: 'value_ladder_info_product',
+  name: 'Value Ladder info-product sales reporting',
+  source: 'value_ladder_info_product_report',
+  audience: ['setter', 'closer', 'sales_manager', 'executive_management'],
+  funnelOrRevenueModel: [
+    'lead magnet or entry product',
+    'masterclass or webinar registration',
+    'masterclass or webinar attended',
+    'workshop registration',
+    'workshop attended',
+    'application submitted',
+    'strategy call booked',
+    'high-ticket offer',
+    'upsell or continuity',
+  ],
+  kpiDefinitions: [
+    ...COMMON_SALES_REPORT_KPIS,
+    'Value Ladder KPIs: movement from lead magnet to webinar, workshop, call booking, application, high-ticket close, and upsell.',
+    'Setter KPIs: follow-up volume, show-up recovery, applications generated, calls booked, and reactivation activity.',
+    'Closer KPIs: high-ticket opportunities owned, won/lost value, objection follow-up activity, and close-stage consistency.',
+  ],
+  roleViews: {
+    seller: [
+      'My follow-up activity for webinar, workshop, application, and high-ticket leads.',
+      'My effective vs non-effective calls and messages after each ladder step.',
+      'My booked calls, open opportunities, won high-ticket deals, and lost opportunities.',
+      'My assigned contacts without email/phone data.',
+      'My daily and monthly outreach consistency.',
+    ],
+    salesLeader: [
+      'Leaderboard by ladder stage: lead magnet, webinar, workshop, call booked, high-ticket close.',
+      'Seller and setter activity after live events or launches.',
+      'Channel effectiveness after webinar/workshop follow-up sequences.',
+      'Pipeline value by offer, stage, seller, and close status.',
+      'No-show, failed contact, and unassigned lead cleanup queues.',
+    ],
+    management: [
+      'Full Value Ladder movement from front-end acquisition to high-ticket revenue.',
+      'Team production by event, offer, pipeline stage, seller, and period.',
+      'High-ticket forecast and bottlenecks by stage and user.',
+      'Channel productivity and non-effective activity across launch windows.',
+      'CRM data quality across event leads, applications, contacts, and opportunities.',
+    ],
+  },
+  useCaseMap: {
+    seller: {
+      launchFollowUp: [
+        'Which webinar or workshop leads do I need to follow up with?',
+        'How many calls, SMS, WhatsApp, and emails did I send after the event?',
+        'Which follow-ups were effective or non-effective?',
+      ],
+      highTicketPipeline: [
+        'How much high-ticket pipeline do I own?',
+        'Which applications or booked calls are open?',
+        'What did I win or lose during this launch period?',
+      ],
+    },
+    salesLeader: {
+      eventPerformance: [
+        'Which sellers converted the most event leads into opportunities?',
+        'Who followed up consistently after the masterclass or workshop?',
+        'Where did leads stop moving through the ladder?',
+      ],
+      coaching: [
+        'Which users have high activity but low booked calls or won value?',
+        'Which channels produce the most effective conversations after events?',
+        'Which pipeline stages have too much value stuck?',
+      ],
+    },
+    management: {
+      revenueStrategy: [
+        'How much revenue and pipeline came from each ladder level?',
+        'Which event or offer generated the most high-ticket pipeline?',
+        'What is the daily, monthly, and yearly trend for launch follow-up activity?',
+      ],
+      risk: [
+        'Where are unassigned or incomplete leads accumulating?',
+        'Which users or stages are blocking high-ticket conversion?',
+        'How much communication is failing or not getting effective responses?',
+      ],
+    },
+  },
+  recommendedPrompts: [
+    'Build a Value Ladder report for this launch by user, including webinar, workshop, high-ticket pipeline, calls, SMS, WhatsApp, and email.',
+    'Show post-webinar follow-up activity by setter and closer with effective vs non-effective conversations.',
+    'Compare high-ticket pipeline value, won deals, and communication activity by seller.',
+  ],
+  notes: [
+    'Value Ladder segmentation depends on pipeline names, stages, tags, offers, or custom fields configured in HighLevel.',
+    'Use pipelineId or userIds to narrow the report to a specific launch, offer, team, or sales pod.',
+  ],
+};
+
 function getOrCreateUserBucket(
   buckets: Map<string, JsonRecord>,
   userId: string,
@@ -1215,8 +1523,12 @@ function getOrCreateUserBucket(
     whatsapp: 0,
     call: 0,
     other: 0,
+    effective: 0,
+    nonEffective: 0,
     delivered: 0,
     failed: 0,
+    periods: emptyActivityPeriods(),
+    averages: {},
     samples: [] as JsonRecord[],
   };
   buckets.set(userId, bucket);
@@ -1332,8 +1644,12 @@ function emptyMessageMetrics(): JsonRecord {
     whatsapp: 0,
     call: 0,
     other: 0,
+    effective: 0,
+    nonEffective: 0,
     delivered: 0,
     failed: 0,
+    periods: emptyActivityPeriods(),
+    averages: {},
     samples: [] as JsonRecord[],
   };
 }
@@ -1373,8 +1689,12 @@ function pickMessageMetrics(bucket: JsonRecord): JsonRecord {
     whatsapp: bucket.whatsapp || 0,
     call: bucket.call || 0,
     other: bucket.other || 0,
+    effective: bucket.effective || 0,
+    nonEffective: bucket.nonEffective || 0,
     delivered: bucket.delivered || 0,
     failed: bucket.failed || 0,
+    periods: bucket.periods || emptyActivityPeriods(),
+    averages: bucket.averages || buildPeriodAverages(bucket.periods || emptyActivityPeriods()),
     samples: bucket.samples || [],
   };
 }
@@ -1410,6 +1730,132 @@ function normalizeOpportunityStatus(value: string): string {
   if (normalized.includes('abandon')) return 'abandoned';
   if (normalized.includes('open')) return 'open';
   return normalized || 'unknown';
+}
+
+function classifyEffectiveness(status: string, channel: string): 'effective' | 'nonEffective' | 'unknown' {
+  const normalized = status.toLowerCase();
+  if (
+    normalized.includes('fail') ||
+    normalized.includes('error') ||
+    normalized.includes('bounce') ||
+    normalized.includes('undeliver') ||
+    normalized.includes('missed') ||
+    normalized.includes('no-answer') ||
+    normalized.includes('no answer') ||
+    normalized.includes('busy') ||
+    normalized.includes('cancel')
+  ) {
+    return 'nonEffective';
+  }
+  if (
+    normalized.includes('deliver') ||
+    normalized.includes('sent') ||
+    normalized.includes('complete') ||
+    normalized.includes('answered') ||
+    normalized.includes('success') ||
+    normalized.includes('read') ||
+    normalized.includes('open')
+  ) {
+    return 'effective';
+  }
+  if (channel === 'Call' && normalized.includes('voicemail')) return 'nonEffective';
+  return 'unknown';
+}
+
+function emptyActivityPeriods(): JsonRecord {
+  return {
+    daily: {} as JsonRecord,
+    monthly: {} as JsonRecord,
+    yearly: {} as JsonRecord,
+  };
+}
+
+function incrementActivityPeriods(
+  periods: JsonRecord,
+  date: string,
+  channel: string,
+  direction: 'outbound' | 'inbound' | 'unknown',
+  effectiveness: 'effective' | 'nonEffective' | 'unknown'
+): void {
+  const parsed = Date.parse(date);
+  if (!Number.isFinite(parsed)) return;
+  const timestamp = new Date(parsed);
+  const iso = timestamp.toISOString();
+  const day = iso.slice(0, 10);
+  const month = iso.slice(0, 7);
+  const year = iso.slice(0, 4);
+
+  incrementPeriodBucket(periods.daily, day, channel, direction, effectiveness);
+  incrementPeriodBucket(periods.monthly, month, channel, direction, effectiveness);
+  incrementPeriodBucket(periods.yearly, year, channel, direction, effectiveness);
+}
+
+function incrementPeriodBucket(
+  collection: JsonRecord,
+  key: string,
+  channel: string,
+  direction: 'outbound' | 'inbound' | 'unknown',
+  effectiveness: 'effective' | 'nonEffective' | 'unknown'
+): void {
+  const bucket = collection[key] || {
+    total: 0,
+    outbound: 0,
+    inbound: 0,
+    unknownDirection: 0,
+    sms: 0,
+    email: 0,
+    whatsapp: 0,
+    call: 0,
+    other: 0,
+    effective: 0,
+    nonEffective: 0,
+  };
+  bucket.total++;
+  incrementChannel(bucket, channel);
+  if (direction === 'outbound') bucket.outbound++;
+  else if (direction === 'inbound') bucket.inbound++;
+  else bucket.unknownDirection++;
+  if (effectiveness === 'effective') bucket.effective++;
+  else if (effectiveness === 'nonEffective') bucket.nonEffective++;
+  collection[key] = bucket;
+}
+
+function buildPeriodAverages(periods: JsonRecord): JsonRecord {
+  return {
+    perDay: averageFromCollection(periods.daily),
+    perMonth: averageFromCollection(periods.monthly),
+    perYear: averageFromCollection(periods.yearly),
+  };
+}
+
+function averageFromCollection(collection: JsonRecord): JsonRecord {
+  const buckets = Object.values(collection).filter(isRecord);
+  if (!buckets.length) {
+    return {
+      periods: 0,
+      total: 0,
+      effective: 0,
+      nonEffective: 0,
+      outbound: 0,
+      inbound: 0,
+    };
+  }
+  return {
+    periods: buckets.length,
+    total: round(sumField(buckets, 'total') / buckets.length),
+    effective: round(sumField(buckets, 'effective') / buckets.length),
+    nonEffective: round(sumField(buckets, 'nonEffective') / buckets.length),
+    outbound: round(sumField(buckets, 'outbound') / buckets.length),
+    inbound: round(sumField(buckets, 'inbound') / buckets.length),
+  };
+}
+
+function sumField(items: JsonRecord[], field: string): number {
+  return items.reduce((sum, item) => sum + (typeof item[field] === 'number' ? item[field] : 0), 0);
+}
+
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function firstArray(root: unknown, paths: string[]): JsonRecord[] {

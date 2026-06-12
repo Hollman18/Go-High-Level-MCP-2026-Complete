@@ -171,7 +171,7 @@ Start agents with the curated profile and prefer these high-level tools before r
 - Official GHL endpoints parsed: `590`
 - Official endpoint coverage: `590 / 590`
 - Generated official endpoint tools: `238`
-- MCP tools in registry: `867`
+- MCP tools in registry: `869`
 - Local-only endpoint references tracked for review: `253`
 
 Generated coverage artifacts live in `docs/`. Run `npm run scan:ghl-api` only when intentionally refreshing API coverage.

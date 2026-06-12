@@ -75,7 +75,11 @@ describe('ReportingTools message activity fallback', () => {
     expect(result.totals.sms).toBe(3);
     expect(result.totals.outbound).toBe(2);
     expect(result.totals.inbound).toBe(1);
+    expect(result.totals.effective).toBe(1);
+    expect(result.totals.nonEffective).toBe(1);
     expect(result.totals.failed).toBe(1);
+    expect(result.totals.periods.daily['2026-06-11'].total).toBe(3);
+    expect(result.averages.perDay.total).toBe(3);
     expect(result.nextCursor).toBe('next-page');
     expect(result.sellers).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -351,5 +355,105 @@ describe('ReportingTools message activity fallback', () => {
     expect(result.users[0].whatsapp.totalMessages).toBe(1);
     expect(result.users[0].email.totalMessages).toBe(1);
     expect(result.users[0].calls.totalMessages).toBe(1);
+  });
+
+  it('builds SaaS and Value Ladder vertical report tools with role use-case maps', async () => {
+    const makeRequest = jest.fn(async (method: string, path: string) => {
+      if (path.startsWith('/users/search')) {
+        return {
+          success: true,
+          data: {
+            users: [
+              { id: 'user_1', firstName: 'Ada', lastName: 'Seller', email: 'ada@example.com' },
+            ],
+          },
+        };
+      }
+      if (method === 'POST' && path === '/opportunities/search') {
+        return {
+          success: true,
+          data: {
+            opportunities: [
+              {
+                id: 'opp_1',
+                assignedTo: 'user_1',
+                value: 2500,
+                status: 'open',
+                pipelineName: 'Subscription Sales',
+                pipelineStageName: 'Demo Booked',
+                createdAt: '2026-06-05T12:00:00.000Z',
+              },
+            ],
+          },
+        };
+      }
+      if (path.startsWith('/contacts/?')) {
+        return {
+          success: true,
+          data: {
+            contacts: [
+              { id: 'contact_1', assignedTo: 'user_1', email: 'lead@example.com', phone: '+1555000' },
+            ],
+          },
+        };
+      }
+      if (path.startsWith('/conversations/messages/export')) {
+        const channel = new URL(`https://example.test${path}`).searchParams.get('channel') || 'SMS';
+        return {
+          success: true,
+          data: {
+            messages: [
+              {
+                id: `msg_${channel}`,
+                userId: 'user_1',
+                channel,
+                direction: 'outbound',
+                status: channel === 'Call' ? 'completed' : 'delivered',
+                createdAt: '2026-06-06T12:00:00.000Z',
+                body: `${channel} sample`,
+              },
+            ],
+          },
+        };
+      }
+      throw new Error(`Unexpected request: ${method} ${path}`);
+    });
+    const reportingTools = new ReportingTools({
+      getConfig: () => ({
+        accessToken: 'test',
+        baseUrl: 'https://services.leadconnectorhq.com',
+        version: '2023-02-21',
+        locationId: 'loc_123',
+      }),
+      makeRequest,
+    } as any);
+
+    const saas = await reportingTools.handleToolCall('get_saas_subscription_report', {
+      startDate: '2026-06-01',
+      endDate: '2026-06-11',
+      limitPerDataset: 25,
+    }) as any;
+    const valueLadder = await reportingTools.handleToolCall('get_value_ladder_info_product_report', {
+      startDate: '2026-06-01',
+      endDate: '2026-06-11',
+      limitPerDataset: 25,
+    }) as any;
+
+    expect(saas.reportModel.type).toBe('saas_subscription');
+    expect(saas.useCaseMap.salesLeader.coaching).toEqual(expect.arrayContaining([
+      expect.stringContaining('calling enough'),
+    ]));
+    expect(saas.users[0].calls.effective).toBe(1);
+    expect(saas.users[0].calls.averages.perDay.total).toBe(1);
+    expect(saas.users[0].pipeline.stageCounts['Demo Booked']).toBe(1);
+
+    expect(valueLadder.reportModel.type).toBe('value_ladder_info_product');
+    expect(valueLadder.reportModel.funnelOrRevenueModel).toEqual(expect.arrayContaining([
+      'masterclass or webinar registration',
+      'high-ticket offer',
+    ]));
+    expect(valueLadder.roleViews.management).toEqual(expect.arrayContaining([
+      expect.stringContaining('Full Value Ladder'),
+    ]));
   });
 });

@@ -6851,6 +6851,40 @@
       "stability": "legacy-compatible"
     },
     {
+      "name": "get_saas_subscription_report",
+      "module": "reporting",
+      "description": "Build a SaaS subscription sales report for closers, setters, sales leaders, and management, including pipeline, calls, SMS, WhatsApp, email, contacts, and SaaS KPI use cases.",
+      "category": "analytics",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [
+        "startDate",
+        "endDate"
+      ],
+      "scopes": [],
+      "source": "local-tool-module",
+      "stability": "private-or-unstable"
+    },
+    {
+      "name": "get_value_ladder_info_product_report",
+      "module": "reporting",
+      "description": "Build a Value Ladder info-product sales report for masterclass/webinar, workshop, lead magnet, entry offer, and high-ticket pipelines with seller, sales leader, and management views.",
+      "category": "analytics",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [
+        "startDate",
+        "endDate"
+      ],
+      "scopes": [],
+      "source": "local-tool-module",
+      "stability": "legacy-compatible"
+    },
+    {
       "name": "get_funnel_reports",
       "module": "reporting",
       "description": "Get funnel performance reports (page views, conversions)",
