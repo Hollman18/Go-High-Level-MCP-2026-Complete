@@ -36,6 +36,7 @@ Use these when an agent needs seller, user, or team production reports:
 | `get_email_activity_by_user` | "Show email activity by seller." |
 | `get_call_activity_by_user` | "Show call activity by seller with call details." |
 | `get_message_activity_by_user` | "Show activity by seller for one channel or all exported conversation channels." |
+| `generate_historical_activity_report` | "Scan the full month of calls/messages by seller and leader with automatic pagination." |
 | `get_saas_subscription_report` | "Build a SaaS subscription sales report for setters, closers, sales leaders, and management." |
 | `get_value_ladder_info_product_report` | "Build a Value Ladder report across webinar/masterclass, workshop, entry offer, high ticket, and upsells." |
 
@@ -121,10 +122,26 @@ If an aggregate reporting endpoint fails, use the conversation export, contacts,
 opportunities, and users tools to build the report from source records.
 ```
 
+## Large Historical Reports
+
+Use `generate_historical_activity_report` when the user asks for a full month or any large history. It automatically follows export cursors and applies safety limits so the agent does not stop after the first page.
+
+Recommended prompt:
+
+```text
+Use generate_historical_activity_report for calls from YYYY-MM-DD to YYYY-MM-DD.
+Set channel to Call, pageLimit to 500, maxPages to 50, and maxRecords to 25000.
+Group by seller and leader. Include answered, no-answer, missed, duration totals,
+average duration, unique contacts, unique conversations, summary CSV, and 500 detail rows.
+```
+
+For scheduled reporting, run the same MCP tool from a VPS cron job and store the returned summary/detail CSV in Drive, object storage, or a private reports folder.
+
 ## Notes For Agents
 
 - Use `get_user_business_report` first for executive summaries.
 - Use the channel-specific tools when the user asks for details or examples.
+- Use `generate_historical_activity_report` for large histories instead of manually following cursors in chat.
 - Results depend on the user fields returned by HighLevel. Records without user fields are grouped as `unassigned`.
 - Use pagination cursors from each response when the user needs a larger report.
 - These tools are read-only and do not send messages, update contacts, or modify pipeline records.

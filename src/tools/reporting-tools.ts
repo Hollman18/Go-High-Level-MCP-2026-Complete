@@ -176,6 +176,41 @@ export class ReportingTools {
         }
       },
       {
+        name: 'generate_historical_activity_report',
+        description: 'Generate a complete historical activity report with automatic pagination across calls, SMS, WhatsApp, email, or all exported conversation activity. Returns executive totals, seller/leader rollups, cursor diagnostics, and optional detail/CSV rows.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            locationId: { type: 'string', description: 'Location ID' },
+            startDate: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+            endDate: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+            channel: { type: 'string', enum: ['SMS', 'Email', 'WhatsApp', 'Call', 'all'], description: 'Single channel to scan. Defaults to all.' },
+            channels: { type: 'array', items: { type: 'string', enum: ['SMS', 'Email', 'WhatsApp', 'Call'] }, description: 'Optional list of channels to scan separately. Ignored when channel is all.' },
+            pageLimit: { type: 'number', description: 'Records per HighLevel page (10-500, default 500)', minimum: 10, maximum: 500 },
+            maxPages: { type: 'number', description: 'Safety cap for API pages to scan (1-200, default 50)', minimum: 1, maximum: 200 },
+            maxRecords: { type: 'number', description: 'Safety cap for total records to scan (100-100000, default 25000)', minimum: 100, maximum: 100000 },
+            cursor: { type: 'string', description: 'Optional starting cursor for continuing a previous export' },
+            userId: { type: 'string', description: 'Only include one assigned/sending user' },
+            userIds: { type: 'array', items: { type: 'string' }, description: 'Only include these assigned/sending users' },
+            leaderMap: { type: 'object', description: 'Optional mapping of userId to leader/manager name or ID for leader rollups' },
+            leaderField: { type: 'string', description: 'Optional record path to read leader/manager from exported records, e.g. assignedTo.managerName' },
+            includeDetails: { type: 'boolean', description: 'Return detailed activity rows. Defaults to false to keep agent responses small.', default: false },
+            maxDetailRows: { type: 'number', description: 'Maximum detailed rows to return when includeDetails is true (10-5000, default 500)', minimum: 10, maximum: 5000 },
+            includeCsv: { type: 'boolean', description: 'Include CSV strings for summary and returned detail rows', default: false },
+            includeSamples: { type: 'boolean', description: 'Include up to three activity samples per seller and leader', default: true },
+          },
+          required: ['startDate', 'endDate']
+        },
+        _meta: {
+          labels: {
+            category: "analytics",
+            access: "read",
+            complexity: "workflow",
+            source: "historical-export"
+          }
+        }
+      },
+      {
         name: 'get_sms_activity_by_user',
         description: 'Build an SMS-by-seller report with sent, received, delivered, failed, and sample message details.',
         inputSchema: {
@@ -623,6 +658,9 @@ export class ReportingTools {
           source: 'conversations_export',
         });
       }
+      case 'generate_historical_activity_report': {
+        return this.buildHistoricalActivityReport(args, locationId);
+      }
       case 'get_sms_activity_by_user': {
         return this.buildMessageActivityByUser({ ...args, channel: 'SMS' }, locationId, {
           source: 'conversations_export_sms',
@@ -866,6 +904,180 @@ export class ReportingTools {
         'This report is built from the official conversations messages export endpoint, not from /reporting/sms.',
         'Grouping depends on user/seller fields returned by HighLevel for each exported message. Messages without a user field are grouped as unassigned.',
       ],
+    };
+  }
+
+  private async buildHistoricalActivityReport(
+    args: Record<string, unknown>,
+    locationId: string
+  ): Promise<unknown> {
+    const pageLimit = clampNumber(args.pageLimit ?? args.limit, 500, 10, 500);
+    const maxPages = clampNumber(args.maxPages, 50, 1, 200);
+    const maxRecords = clampNumber(args.maxRecords, 25000, 100, 100000);
+    const maxDetailRows = clampNumber(args.maxDetailRows, 500, 10, 5000);
+    const includeDetails = args.includeDetails === true;
+    const includeCsv = args.includeCsv === true;
+    const includeSamples = args.includeSamples !== false;
+    const filterUserIds = userFilter(args);
+    const users = await this.loadUsers(locationId);
+    const userMap = new Map(users.map((user) => [user.id, user]));
+    const channels = historicalChannels(args);
+    const totals = emptyHistoricalMetrics();
+    const byUser = new Map<string, JsonRecord>();
+    const byLeader = new Map<string, JsonRecord>();
+    const details: JsonRecord[] = [];
+    const progress: JsonRecord[] = [];
+    const leaderMap = isRecord(args.leaderMap) ? args.leaderMap : {};
+    const leaderField = stringArg(args.leaderField);
+    const startedAt = new Date().toISOString();
+    let scannedRecords = 0;
+    let matchedRecords = 0;
+    let stoppedBySafetyLimit = false;
+
+    for (const channel of channels) {
+      let cursor = stringArg(args.cursor);
+      const seenCursors = new Set<string>();
+
+      for (let page = 1; page <= maxPages; page++) {
+        if (scannedRecords >= maxRecords) {
+          stoppedBySafetyLimit = true;
+          break;
+        }
+
+        const pageData = await this.fetchHistoricalMessagePage({
+          locationId,
+          channel,
+          startDate: stringArg(args.startDate),
+          endDate: stringArg(args.endDate),
+          cursor,
+          limit: Math.min(pageLimit, maxRecords - scannedRecords),
+        });
+        const messages = pageData.messages;
+        scannedRecords += messages.length;
+
+        for (const item of messages) {
+          if (scannedRecords > maxRecords) {
+            stoppedBySafetyLimit = true;
+            break;
+          }
+          const message = isRecord(item) ? item : {};
+          const normalized = normalizeHistoricalRecord(message, channel, userMap, leaderMap, leaderField);
+          if (!matchesUserFilter(filterUserIds, normalized.userId)) continue;
+          matchedRecords++;
+          addHistoricalRecord(totals, normalized, includeSamples);
+          addHistoricalRecord(
+            getOrCreateHistoricalBucket(byUser, normalized.userId, normalized.userName, normalized.userEmail),
+            normalized,
+            includeSamples
+          );
+          addHistoricalRecord(
+            getOrCreateHistoricalBucket(byLeader, normalized.leaderId, normalized.leaderName),
+            normalized,
+            includeSamples
+          );
+          if (includeDetails && details.length < maxDetailRows) details.push(normalized.detail);
+        }
+
+        const nextCursor = pageData.nextCursor;
+        progress.push({
+          channel,
+          page,
+          scanned: messages.length,
+          cursorUsed: cursor,
+          nextCursor,
+        });
+
+        if (!nextCursor || messages.length === 0 || seenCursors.has(nextCursor)) {
+          cursor = nextCursor;
+          break;
+        }
+        seenCursors.add(nextCursor);
+        cursor = nextCursor;
+      }
+
+      if (stoppedBySafetyLimit) break;
+    }
+
+    const sellers = [...byUser.values()].map(finalizeHistoricalMetrics).sort((a, b) => b.totalRecords - a.totalRecords);
+    const leaders = [...byLeader.values()].map(finalizeHistoricalMetrics).sort((a, b) => b.totalRecords - a.totalRecords);
+    const summaryRows = sellers.map((seller) => historicalSummaryRow(seller));
+    const finalizedTotals = finalizeHistoricalMetrics(totals);
+
+    return {
+      success: true,
+      source: 'historical_conversations_export',
+      locationId,
+      dateRange: {
+        startDate: args.startDate,
+        endDate: args.endDate,
+      },
+      channels,
+      limits: {
+        pageLimit,
+        maxPages,
+        maxRecords,
+        maxDetailRows: includeDetails ? maxDetailRows : 0,
+      },
+      scannedRecords,
+      matchedRecords,
+      stoppedBySafetyLimit,
+      completed: !stoppedBySafetyLimit,
+      generatedAt: new Date().toISOString(),
+      runtime: {
+        startedAt,
+        completedAt: new Date().toISOString(),
+      },
+      totals: finalizedTotals,
+      sellers,
+      leaders,
+      details: includeDetails ? details : undefined,
+      exports: includeCsv ? {
+        summaryCsv: toCsv(summaryRows),
+        detailCsv: includeDetails ? toCsv(details) : undefined,
+        returnedDetailRows: details.length,
+        detailRowsTruncated: includeDetails && matchedRecords > details.length,
+      } : undefined,
+      pagination: {
+        pagesScanned: progress.length,
+        lastCursor: progress.length ? progress[progress.length - 1].nextCursor : undefined,
+        progress,
+      },
+      notes: [
+        'This tool automatically paginates HighLevel conversation message exports until the cursor ends or a safety limit is reached.',
+        'For very large accounts, schedule this report in a VPS cron job and store the CSV/JSON output externally instead of asking the agent to print every row.',
+        'Leader rollups require leaderMap or leaderField unless HighLevel returns a leader/manager field in the exported activity record.',
+      ],
+    };
+  }
+
+  private async fetchHistoricalMessagePage(options: {
+    locationId: string;
+    channel: string;
+    startDate?: string;
+    endDate?: string;
+    cursor?: string;
+    limit: number;
+  }): Promise<{ messages: JsonRecord[]; nextCursor?: string }> {
+    const params = new URLSearchParams();
+    params.append('locationId', options.locationId);
+    params.append('limit', String(options.limit));
+    params.append('sortBy', 'createdAt');
+    params.append('sortOrder', 'desc');
+    if (options.channel !== 'all') params.append('channel', options.channel);
+    if (options.startDate) params.append('startDate', options.startDate);
+    if (options.endDate) params.append('endDate', options.endDate);
+    if (options.cursor) params.append('cursor', options.cursor);
+
+    const response = await this.ghlClient.makeRequest(
+      'GET',
+      `/conversations/messages/export?${params.toString()}`,
+      undefined,
+      { version: '2021-04-15' }
+    );
+    const responseData = (response as JsonRecord).data ?? response;
+    return {
+      messages: firstArray(responseData, ['messages', 'data.messages', 'data', 'items', 'records', 'results']),
+      nextCursor: firstString(responseData, ['nextCursor', 'cursor.next', 'meta.nextCursor', 'pagination.nextCursor']),
     };
   }
 
@@ -1609,6 +1821,29 @@ function getOrCreateBusinessBucket(
   return bucket;
 }
 
+function getOrCreateHistoricalBucket(
+  buckets: Map<string, JsonRecord>,
+  id: string,
+  name: string,
+  email?: string
+): JsonRecord {
+  const existing = buckets.get(id);
+  if (existing) {
+    if (!existing.userEmail && email) existing.userEmail = email;
+    return existing;
+  }
+  const bucket = {
+    id,
+    userId: id,
+    userName: name,
+    name,
+    userEmail: email,
+    ...emptyHistoricalMetrics(),
+  };
+  buckets.set(id, bucket);
+  return bucket;
+}
+
 function emptyContactMetrics(): JsonRecord {
   return {
     totalContacts: 0,
@@ -1648,6 +1883,37 @@ function emptyMessageMetrics(): JsonRecord {
     nonEffective: 0,
     delivered: 0,
     failed: 0,
+    periods: emptyActivityPeriods(),
+    averages: {},
+    samples: [] as JsonRecord[],
+  };
+}
+
+function emptyHistoricalMetrics(): JsonRecord {
+  return {
+    totalRecords: 0,
+    outbound: 0,
+    inbound: 0,
+    unknownDirection: 0,
+    sms: 0,
+    email: 0,
+    whatsapp: 0,
+    call: 0,
+    other: 0,
+    effective: 0,
+    nonEffective: 0,
+    delivered: 0,
+    failed: 0,
+    answeredCalls: 0,
+    missedCalls: 0,
+    noAnswerCalls: 0,
+    busyCalls: 0,
+    voicemailCalls: 0,
+    canceledCalls: 0,
+    totalCallDurationSeconds: 0,
+    callDurationSamples: 0,
+    contactIds: new Set<string>(),
+    conversationIds: new Set<string>(),
     periods: emptyActivityPeriods(),
     averages: {},
     samples: [] as JsonRecord[],
@@ -1696,6 +1962,171 @@ function pickMessageMetrics(bucket: JsonRecord): JsonRecord {
     periods: bucket.periods || emptyActivityPeriods(),
     averages: bucket.averages || buildPeriodAverages(bucket.periods || emptyActivityPeriods()),
     samples: bucket.samples || [],
+  };
+}
+
+function historicalChannels(args: Record<string, unknown>): string[] {
+  const channel = normalizeChannel(stringArg(args.channel) || 'all');
+  if (channel === 'all') return ['all'];
+  if (Array.isArray(args.channels) && args.channels.length) {
+    const values = args.channels
+      .map((value) => normalizeChannel(String(value || '')))
+      .filter((value) => ['SMS', 'Email', 'WhatsApp', 'Call'].includes(value));
+    return [...new Set(values.length ? values : [channel])];
+  }
+  return [channel];
+}
+
+function normalizeHistoricalRecord(
+  message: JsonRecord,
+  requestedChannel: string,
+  userMap: Map<string, UserInfo>,
+  leaderMap: JsonRecord,
+  leaderField?: string
+): JsonRecord {
+  const userId = firstString(message, [
+    'userId',
+    'user_id',
+    'senderId',
+    'sender.id',
+    'user.id',
+    'messageBy.id',
+    'createdBy',
+    'createdBy.id',
+    'assignedTo',
+    'assignedTo.id',
+    'assignedUserId',
+    'ownerId',
+    'staffId',
+  ]) || 'unassigned';
+  const user = userMap.get(userId);
+  const userName = user?.name || firstString(message, [
+    'userName',
+    'senderName',
+    'sender.name',
+    'user.name',
+    'messageBy.name',
+    'createdBy.name',
+    'assignedTo.name',
+    'assignedUserName',
+  ]) || (userId === 'unassigned' ? 'Sin vendedor/usuario en el registro' : userId);
+  const channel = normalizeChannel(firstString(message, ['channel', 'type', 'messageType', 'message_type']) || requestedChannel);
+  const direction = normalizeDirection(firstString(message, ['direction', 'messageDirection', 'source', 'status']));
+  const status = String(firstString(message, ['status', 'deliveryStatus', 'messageStatus', 'call.status']) || '').toLowerCase();
+  const date = firstString(message, ['date', 'createdAt', 'created_at', 'dateAdded']);
+  const effectiveness = classifyEffectiveness(status, channel);
+  const contactId = firstString(message, ['contactId', 'contact.id']);
+  const conversationId = firstString(message, ['conversationId', 'conversation.id']);
+  const durationSeconds = channel === 'Call' ? callDurationSeconds(message) : 0;
+  const leaderName = leaderNameFor(message, userId, leaderMap, leaderField);
+  const body = firstString(message, ['body', 'message', 'text', 'content', 'lastMessageBody']) || '';
+
+  return {
+    userId,
+    userName,
+    userEmail: user?.email,
+    leaderId: leaderName || 'unassigned_leader',
+    leaderName: leaderName || 'Sin líder asignado',
+    channel,
+    direction,
+    status,
+    date,
+    effectiveness,
+    contactId,
+    conversationId,
+    durationSeconds,
+    detail: {
+      id: firstString(message, ['id', 'messageId', '_id']),
+      date,
+      userId,
+      userName,
+      userEmail: user?.email,
+      leader: leaderName || undefined,
+      channel,
+      direction,
+      status: status || undefined,
+      effectiveness,
+      contactId,
+      conversationId,
+      durationSeconds: durationSeconds || undefined,
+      preview: preview(body),
+    },
+  };
+}
+
+function addHistoricalRecord(bucket: JsonRecord, record: JsonRecord, includeSamples: boolean): void {
+  bucket.totalRecords++;
+  incrementChannel(bucket, record.channel);
+  if (record.direction === 'outbound') bucket.outbound++;
+  else if (record.direction === 'inbound') bucket.inbound++;
+  else bucket.unknownDirection++;
+  if (String(record.status).includes('deliver')) bucket.delivered++;
+  if (String(record.status).includes('fail') || String(record.status).includes('error')) bucket.failed++;
+  if (record.effectiveness === 'effective') bucket.effective++;
+  else if (record.effectiveness === 'nonEffective') bucket.nonEffective++;
+  if (record.contactId && bucket.contactIds instanceof Set) bucket.contactIds.add(record.contactId);
+  if (record.conversationId && bucket.conversationIds instanceof Set) bucket.conversationIds.add(record.conversationId);
+  if (record.channel === 'Call') incrementCallOutcome(bucket, record.status, record.durationSeconds);
+  incrementActivityPeriods(bucket.periods, record.date, record.channel, record.direction, record.effectiveness);
+  if (includeSamples && bucket.samples.length < 3) bucket.samples.push(record.detail);
+}
+
+function incrementCallOutcome(bucket: JsonRecord, status: string, durationSeconds: number): void {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized.includes('miss')) bucket.missedCalls++;
+  if (normalized.includes('no-answer') || normalized.includes('no answer')) bucket.noAnswerCalls++;
+  if (normalized.includes('busy')) bucket.busyCalls++;
+  if (normalized.includes('voicemail')) bucket.voicemailCalls++;
+  if (normalized.includes('cancel')) bucket.canceledCalls++;
+  if (
+    !normalized.includes('no-answer') &&
+    !normalized.includes('no answer') &&
+    (normalized.includes('answer') || normalized.includes('complete') || normalized.includes('success'))
+  ) {
+    bucket.answeredCalls++;
+  }
+  if (durationSeconds > 0) {
+    bucket.totalCallDurationSeconds += durationSeconds;
+    bucket.callDurationSamples++;
+  }
+}
+
+function finalizeHistoricalMetrics(bucket: JsonRecord): JsonRecord {
+  const contactCount = bucket.contactIds instanceof Set ? bucket.contactIds.size : 0;
+  const conversationCount = bucket.conversationIds instanceof Set ? bucket.conversationIds.size : 0;
+  return {
+    ...bucket,
+    contactIds: undefined,
+    conversationIds: undefined,
+    uniqueContacts: contactCount,
+    uniqueConversations: conversationCount,
+    averageCallDurationSeconds: bucket.callDurationSamples ? round(bucket.totalCallDurationSeconds / bucket.callDurationSamples) : 0,
+    averages: buildPeriodAverages(bucket.periods || emptyActivityPeriods()),
+  };
+}
+
+function historicalSummaryRow(bucket: JsonRecord): JsonRecord {
+  return {
+    userId: bucket.userId || bucket.id,
+    userName: bucket.userName || bucket.name,
+    userEmail: bucket.userEmail,
+    totalRecords: bucket.totalRecords,
+    calls: bucket.call,
+    sms: bucket.sms,
+    whatsapp: bucket.whatsapp,
+    emails: bucket.email,
+    outbound: bucket.outbound,
+    inbound: bucket.inbound,
+    effective: bucket.effective,
+    nonEffective: bucket.nonEffective,
+    failed: bucket.failed,
+    answeredCalls: bucket.answeredCalls,
+    missedCalls: bucket.missedCalls,
+    noAnswerCalls: bucket.noAnswerCalls,
+    totalCallDurationSeconds: bucket.totalCallDurationSeconds,
+    averageCallDurationSeconds: bucket.averageCallDurationSeconds,
+    uniqueContacts: bucket.uniqueContacts,
+    uniqueConversations: bucket.uniqueConversations,
   };
 }
 
@@ -1886,6 +2317,57 @@ function numberFrom(root: unknown, paths: string[]): number {
     }
   }
   return 0;
+}
+
+function leaderNameFor(message: JsonRecord, userId: string, leaderMap: JsonRecord, leaderField?: string): string {
+  if (leaderField) {
+    const fromField = firstString(message, [leaderField]);
+    if (fromField) return fromField;
+  }
+  const mapped = leaderMap[userId];
+  if (typeof mapped === 'string') return mapped;
+  if (isRecord(mapped)) return firstString(mapped, ['name', 'leaderName', 'id', 'leaderId']);
+  return firstString(message, [
+    'leaderId',
+    'leaderName',
+    'managerId',
+    'managerName',
+    'assignedTo.managerName',
+    'assignedTo.manager.id',
+    'user.managerName',
+    'user.manager.id',
+  ]);
+}
+
+function callDurationSeconds(message: JsonRecord): number {
+  const numeric = numberFrom(message, ['callDurationSeconds', 'durationSeconds', 'call.durationSeconds', 'call.duration']);
+  if (numeric > 0) return numeric;
+  const raw = firstString(message, ['callDuration', 'duration', 'call.durationText', 'call.callDuration']);
+  if (!raw) return 0;
+  const parts = raw.split(':').map((part) => Number(part));
+  if (parts.length > 1 && parts.every((part) => Number.isFinite(part))) {
+    return parts.reduce((total, value) => total * 60 + value, 0);
+  }
+  const parsed = Number(raw.replace(/[^0-9.]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toCsv(rows: JsonRecord[]): string {
+  if (!rows.length) return '';
+  const headers = [...rows.reduce((set, row) => {
+    Object.keys(row).forEach((key) => set.add(key));
+    return set;
+  }, new Set<string>())];
+  return [
+    headers.join(','),
+    ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(',')),
+  ].join('\n');
+}
+
+function csvCell(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 function userFilter(args: Record<string, unknown>): Set<string> | undefined {

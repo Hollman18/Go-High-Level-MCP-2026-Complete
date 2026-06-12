@@ -32,8 +32,8 @@ This project is not affiliated with or endorsed by GoHighLevel. GoHighLevel, Hig
 - Official endpoint coverage: `590 / 590`
 - Generated official OpenAPI tools: `234`
 - Live-docs supplemental tools: `14`
-- MCP tools in registry: `866`
-- Reporting and analytics tools: `22`
+- MCP tools in registry: `867`
+- Reporting and analytics tools: `23`
 - Node.js: `>=20`, tested with Node 22
 - License: see [LICENSE](LICENSE)
 
@@ -197,6 +197,7 @@ Key tools:
 - `get_whatsapp_activity_by_user`
 - `get_email_activity_by_user`
 - `get_message_activity_by_user`
+- `generate_historical_activity_report`
 
 Reports include:
 
@@ -206,6 +207,15 @@ Reports include:
 - Email by user: activity, delivery/failure proxy, inbound/outbound, samples, and periods.
 - Contacts by user: assigned contacts, contacts with email, contacts with phone, missing data, and unassigned records.
 - Pipeline by user: open, won, lost, abandoned, stage distribution, pipeline distribution, value, and sample opportunities.
+- Historical activity exports: automatic pagination for larger date ranges, seller/leader rollups, call duration metrics, optional detail rows, and CSV-ready output.
+
+For large historical questions, prefer `generate_historical_activity_report` instead of asking the agent to print every raw record in one response. Example prompt:
+
+```text
+Use generate_historical_activity_report to scan all calls from 2026-06-01 to 2026-06-30.
+Group by seller and leader, include call duration, answered/no-answer totals, unique contacts,
+and return summary CSV plus up to 500 detail rows.
+```
 
 Vertical report models:
 

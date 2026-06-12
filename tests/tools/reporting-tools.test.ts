@@ -456,4 +456,173 @@ describe('ReportingTools message activity fallback', () => {
       expect.stringContaining('Full Value Ladder'),
     ]));
   });
+
+  it('generates a paginated historical call report grouped by seller and leader', async () => {
+    const makeRequest = jest.fn(async (_method: string, path: string) => {
+      if (path.startsWith('/users/search')) {
+        return {
+          success: true,
+          data: {
+            users: [
+              { id: 'user_1', firstName: 'Ada', lastName: 'Closer', email: 'ada@example.com' },
+              { id: 'user_2', firstName: 'Grace', lastName: 'Setter', email: 'grace@example.com' },
+            ],
+          },
+        };
+      }
+      if (path.startsWith('/conversations/messages/export')) {
+        const url = new URL(`https://example.test${path}`);
+        const cursor = url.searchParams.get('cursor');
+        if (!cursor) {
+          return {
+            success: true,
+            data: {
+              messages: [
+                {
+                  id: 'call_1',
+                  userId: 'user_1',
+                  channel: 'Call',
+                  direction: 'outbound',
+                  status: 'answered',
+                  callDuration: '00:02:30',
+                  contactId: 'contact_1',
+                  conversationId: 'conv_1',
+                  createdAt: '2026-06-10T14:00:00.000Z',
+                },
+              ],
+              nextCursor: 'page-2',
+            },
+          };
+        }
+        return {
+          success: true,
+          data: {
+            messages: [
+              {
+                id: 'call_2',
+                userId: 'user_2',
+                channel: 'Call',
+                direction: 'outbound',
+                status: 'no-answer',
+                durationSeconds: 30,
+                contactId: 'contact_2',
+                conversationId: 'conv_2',
+                createdAt: '2026-06-11T14:00:00.000Z',
+              },
+            ],
+          },
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    const reportingTools = new ReportingTools({
+      getConfig: () => ({
+        accessToken: 'test',
+        baseUrl: 'https://services.leadconnectorhq.com',
+        version: '2023-02-21',
+        locationId: 'loc_123',
+      }),
+      makeRequest,
+    } as any);
+
+    const result = await reportingTools.handleToolCall('generate_historical_activity_report', {
+      startDate: '2026-06-01',
+      endDate: '2026-06-30',
+      channel: 'Call',
+      pageLimit: 500,
+      maxPages: 5,
+      includeDetails: true,
+      includeCsv: true,
+      leaderMap: {
+        user_1: 'Leader A',
+        user_2: 'Leader B',
+      },
+    }) as any;
+
+    expect(result.success).toBe(true);
+    expect(result.completed).toBe(true);
+    expect(result.scannedRecords).toBe(2);
+    expect(result.matchedRecords).toBe(2);
+    expect(result.pagination.pagesScanned).toBe(2);
+    expect(result.totals.call).toBe(2);
+    expect(result.totals.answeredCalls).toBe(1);
+    expect(result.totals.noAnswerCalls).toBe(1);
+    expect(result.totals.totalCallDurationSeconds).toBe(180);
+    expect(result.totals.averageCallDurationSeconds).toBe(90);
+    expect(result.sellers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        userId: 'user_1',
+        userName: 'Ada Closer',
+        call: 1,
+        answeredCalls: 1,
+        uniqueContacts: 1,
+      }),
+      expect.objectContaining({
+        userId: 'user_2',
+        userName: 'Grace Setter',
+        call: 1,
+        noAnswerCalls: 1,
+      }),
+    ]));
+    expect(result.leaders).toEqual(expect.arrayContaining([
+      expect.objectContaining({ userName: 'Leader A', call: 1 }),
+      expect.objectContaining({ userName: 'Leader B', call: 1 }),
+    ]));
+    expect(result.details).toHaveLength(2);
+    expect(result.exports.summaryCsv).toContain('Ada Closer');
+    expect(result.exports.detailCsv).toContain('call_1');
+    expect(makeRequest).toHaveBeenCalledWith(
+      'GET',
+      expect.stringContaining('cursor=page-2'),
+      undefined,
+      { version: '2021-04-15' },
+    );
+  });
+
+  it('stops historical export at the configured record safety limit', async () => {
+    const makeRequest = jest.fn(async (_method: string, path: string) => {
+      if (path.startsWith('/users/search')) return { success: true, data: { users: [] } };
+      if (path.startsWith('/conversations/messages/export')) {
+        return {
+          success: true,
+          data: {
+            messages: Array.from({ length: 100 }, (_, index) => ({
+              id: `msg_${index}`,
+              userId: 'user_1',
+              channel: 'SMS',
+              direction: 'outbound',
+              status: 'delivered',
+              createdAt: '2026-06-11T14:00:00.000Z',
+            })),
+            nextCursor: 'another-page',
+          },
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    const reportingTools = new ReportingTools({
+      getConfig: () => ({
+        accessToken: 'test',
+        baseUrl: 'https://services.leadconnectorhq.com',
+        version: '2023-02-21',
+        locationId: 'loc_123',
+      }),
+      makeRequest,
+    } as any);
+
+    const result = await reportingTools.handleToolCall('generate_historical_activity_report', {
+      startDate: '2026-06-01',
+      endDate: '2026-06-30',
+      channel: 'SMS',
+      pageLimit: 100,
+      maxRecords: 100,
+      maxPages: 20,
+    }) as any;
+
+    expect(result.stoppedBySafetyLimit).toBe(true);
+    expect(result.completed).toBe(false);
+    expect(result.scannedRecords).toBe(100);
+    expect(result.pagination.pagesScanned).toBe(1);
+    expect(makeRequest).toHaveBeenCalledTimes(2);
+  });
 });
