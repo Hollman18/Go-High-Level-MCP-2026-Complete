@@ -25,6 +25,13 @@ import {
 
 dotenv.config();
 
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://claude.ai',
+  'https://chatgpt.com',
+  'https://chat.openai.com',
+  'https://platform.openai.com',
+];
+
 const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
 type LogLevel = keyof typeof LOG_LEVELS;
 const MIN_LEVEL: LogLevel = (process.env.LOG_LEVEL as LogLevel) || 'info';
@@ -57,6 +64,33 @@ function createMcpServer(client: EnhancedGHLClient): McpServer {
   return server;
 }
 
+function configuredAllowedOrigins(publicBaseUrl: string): Set<string> {
+  const origins = new Set(DEFAULT_ALLOWED_ORIGINS);
+  if (publicBaseUrl) origins.add(publicBaseUrl);
+  for (const origin of (process.env.MCP_ALLOWED_ORIGINS || '').split(',')) {
+    const trimmed = origin.trim().replace(/\/$/, '');
+    if (trimmed) origins.add(trimmed);
+  }
+  return origins;
+}
+
+function isAllowedCorsOrigin(origin: string | undefined, allowedOrigins: Set<string>): boolean {
+  if (!origin) return true;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) return true;
+  return allowedOrigins.has(origin.replace(/\/$/, ''));
+}
+
+function securityHeaders(): express.RequestHandler {
+  return (_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  };
+}
+
 async function main() {
   const port = parseInt(process.env.PORT || process.env.MCP_SERVER_PORT || '8000', 10);
   const authMode = process.env.MCP_AUTH_MODE || 'static';
@@ -72,6 +106,7 @@ async function main() {
   const startTime = Date.now();
   const publicBaseUrl = (process.env.MCP_PUBLIC_BASE_URL || '').replace(/\/$/, '');
   const logoUri = publicBaseUrl ? `${publicBaseUrl}/logo.png` : '/logo.png';
+  const allowedOrigins = configuredAllowedOrigins(publicBaseUrl);
 
   log('info', 'Initializing GHL MCP server', {
     baseUrl: config.baseUrl,
@@ -79,6 +114,7 @@ async function main() {
     locationId: config.locationId,
     tools: toolCount,
     authMode,
+    allowedOrigins: [...allowedOrigins],
   });
 
   if (!isByoGhlOAuth) {
@@ -87,14 +123,22 @@ async function main() {
 
   const app = express();
   app.set('trust proxy', true);
+  app.disable('x-powered-by');
+  app.use(securityHeaders());
   app.use(cors({
-    origin: true,
+    origin: (origin, callback) => {
+      if (isAllowedCorsOrigin(origin, allowedOrigins)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('CORS origin not allowed'));
+    },
     methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'mcp-session-id', 'x-ghl-access-token', 'x-ghl-location-id'],
     credentials: true,
   }));
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: false }));
+  app.use(express.json({ limit: process.env.MCP_JSON_LIMIT || '1mb' }));
+  app.use(express.urlencoded({ extended: false, limit: process.env.MCP_FORM_LIMIT || '256kb' }));
   app.use((req, _res, next) => {
     log('debug', `${req.method} ${req.path}`, { ip: req.ip });
     next();
@@ -238,8 +282,16 @@ async function main() {
       res.json({ result });
     } catch (err: any) {
       log('error', `REST tool error: ${name}`, { error: err.message });
-      res.status(500).json({ error: `Tool execution failed: ${err.message}` });
+      res.status(500).json({ error: 'Tool execution failed' });
     }
+  });
+
+  app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err instanceof Error && err.message === 'CORS origin not allowed') {
+      res.status(403).json({ error: 'CORS origin not allowed' });
+      return;
+    }
+    next(err);
   });
 
   app.listen(port, '0.0.0.0', () => {

@@ -1,8 +1,16 @@
 {
   "name": "go-high-level-mcp-server",
   "version": "1.0.0",
-  "description": "GoHighLevel MCP Server - 100% official GHL API coverage, beginner setup CLI, agent-safe onboarding, curated CRM workflows, MCP Apps, and client config generation",
+  "description": "Production-ready GoHighLevel MCP server with remote HTTP connector, BYO-GHL OAuth, full API coverage, curated CRM workflows, business reporting tools, and secure agent onboarding.",
   "main": "dist/main.js",
+  "homepage": "https://go.mcpgohighlevel.com/mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hollman18/Go-High-Level-MCP-2026-Complete.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Hollman18/Go-High-Level-MCP-2026-Complete/issues"
+  },
   "bin": {
     "ghl-mcp-server": "dist/server.js",
     "ghl-mcp": "scripts/ghl-mcp.mjs"
@@ -15,6 +23,7 @@
     "public/",
     "mcp-apps/",
     "README.md",
+    "SECURITY.md",
     "QUICKSTART.md",
     "AGENT_SETUP.md",
     "UPDATE_LOG.md",
@@ -80,12 +89,20 @@
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "gohighlevel",
+    "highlevel",
+    "leadconnector",
+    "crm",
+    "sales-automation",
+    "ai-agents",
+    "claude",
     "chatgpt",
+    "codex",
     "api"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "mcpgohighlevel.com contributors",
+  "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
     "@types/cors": "^2.8.18",
     "@types/express": "^5.0.2",

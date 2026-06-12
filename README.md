@@ -1,17 +1,80 @@
 # GoHighLevel MCP Server
 
-Model Context Protocol server for GoHighLevel. It exposes GHL API operations as MCP tools over stdio, Streamable HTTP, legacy SSE, and optional MCP Apps.
+Production-ready Model Context Protocol server for GoHighLevel. It exposes GoHighLevel/LeadConnector CRM capabilities to MCP-compatible AI agents over Streamable HTTP, stdio, legacy SSE, and optional MCP Apps.
 
-New here? Start with [QUICKSTART.md](QUICKSTART.md).
+Use it locally with desktop agents, deploy it as a remote connector, or publish a hosted endpoint where each user connects with their own GoHighLevel Private Integration Token and Location ID.
 
-Using an AI/dev agent? Give it [AGENT_SETUP.md](AGENT_SETUP.md) and say: "Set this up for my MCP client using the curated profile. Ask me for credentials if needed. Do not run write tools."
+## About
 
-## 5-Minute Quickstart
+GoHighLevel MCP Server is a community-built connector that helps AI agents read, analyze, and orchestrate GoHighLevel CRM data without every agent needing to understand the GoHighLevel API surface directly.
+
+The project is designed for agencies, SaaS sales teams, appointment-setting teams, consultants, operators, and builders who want a safer and more structured way to connect GoHighLevel with modern AI workflows.
+
+Highlights:
+
+- Remote MCP endpoint: `https://go.mcpgohighlevel.com/mcp`
+- Streamable HTTP MCP at `/mcp`
+- Legacy SSE at `/sse`
+- REST bridge endpoints for tool discovery and execution
+- BYO-GHL OAuth-style connector flow for public multi-user installs
+- Full official GoHighLevel API coverage from generated OpenAPI tools
+- Curated CRM workflows for agent-friendly daily use
+- Business reporting tools for sellers, setters, closers, managers, and executives
+- MCP Apps onboarding screen with GoHighLevel branding
+- CI/CD deployment flow for Hostinger VPS
+- Security-focused defaults for auth, CORS, request limits, Docker, and secret handling
+
+This project is not affiliated with or endorsed by GoHighLevel. GoHighLevel, HighLevel, and LeadConnector are trademarks of their respective owners.
+
+## Current Status
+
+- Official GHL endpoints parsed: `590`
+- Official endpoint coverage: `590 / 590`
+- Generated official endpoint tools: `238`
+- MCP tools in registry: `869`
+- Reporting tools: `22`
+- Node.js: `>=20`, tested with Node 22
+- License: see [LICENSE](LICENSE)
+
+## Core Use Cases
+
+- Connect Claude, ChatGPT, Codex, Cursor, Windsurf, n8n, OpenAI Playground, and other MCP-compatible clients to GoHighLevel.
+- Search contacts, conversations, opportunities, calendars, tasks, payments, forms, funnels, workflows, users, products, and more.
+- Generate seller and manager reports from real source records: contacts, opportunities, exported messages, calls, SMS, WhatsApp, and email.
+- Prepare safe CRM actions with confirmation queues before write operations.
+- Host a public connector where each user authorizes with their own GoHighLevel credentials.
+- Keep API coverage aligned with upstream GoHighLevel docs through generated inventory and coverage reports.
+
+## Security Model
+
+This server can access sensitive CRM data. Treat it as production infrastructure.
+
+Security features included:
+
+- Hosted MCP routes can require `Authorization: Bearer <token>`.
+- Public multi-user mode stores user-provided GHL credentials in encrypted sealed tokens.
+- CORS is restricted to known origins and configurable through `MCP_ALLOWED_ORIGINS`.
+- Express disables `x-powered-by`.
+- HTTP responses include basic hardening headers.
+- JSON and form bodies have size limits.
+- REST execution errors are logged server-side but returned as generic client errors.
+- Docker runtime runs as the non-root `node` user.
+- `.env`, keys, logs, build output, and backup files are ignored from git/Docker context.
+- Write/destructive tools remain discoverable but should be gated by confirmation in agent workflows.
+
+Security docs:
+
+- [SECURITY.md](SECURITY.md)
+- [Safety](docs/SAFETY.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Hostinger CI/CD](docs/HOSTINGER-CICD.md)
+
+## Quickstart
 
 Requirements:
 
-- Node 20+
-- A GoHighLevel private integration token or OAuth access token
+- Node.js 20+
+- A GoHighLevel Private Integration Token or OAuth access token
 - A GoHighLevel Location ID
 
 ```bash
@@ -19,7 +82,6 @@ npm install
 cp .env.example .env
 npm run build
 npm run doctor
-npm run configure:codex
 ```
 
 Add your credentials to `.env`:
@@ -31,40 +93,75 @@ GHL_BASE_URL=https://services.leadconnectorhq.com
 GHL_API_VERSION=2023-02-21
 ```
 
-`GHL_API_VERSION=2023-02-21` is the current HighLevel API `Version` header used by official docs. It is not the project year, and it should not be changed to 2026 unless HighLevel publishes a new required API version.
+`GHL_API_VERSION=2023-02-21` is the GoHighLevel API `Version` header used by the current docs. It is not the project year; do not change it unless GoHighLevel publishes a new required API version.
 
-Then verify live auth:
+Verify auth:
 
 ```bash
 npm run auth-check
 ```
 
-## Setup Commands
+## Run Modes
 
 ```bash
-npm run setup                 # Create .env if needed, build, and print next steps
-npm run first-run             # One-command beginner setup/readiness flow
-npm run connect               # Setup plus client config generation
-npm run ready                 # Fast readiness check
-npm run demo                  # Print MCP Apps demo preview instructions
-npm run explain-error -- "Location is not active"
-npm run doctor                # Human-readable setup check
-npm run doctor -- --json      # Agent-readable setup check
-npm run agent:check           # Safe validation for AI/dev agents
-npm run auth-check            # Read-only GHL token/location check
+npm run start:stdio       # Desktop MCP clients
+npm run start:http        # Streamable HTTP at /mcp
+npm run start:legacy      # Legacy SSE at /sse
 ```
 
-Missing credentials are reported as `needsHumanAction`, not as a broken install. This lets agents build and configure the repo without inventing secrets.
+HTTP endpoints:
 
-## MCP Client Config
+- `GET /`
+- `GET /health`
+- `GET /capabilities`
+- `GET /tools`
+- `GET /tool-inventory`
+- `POST /execute`
+- `POST /tools/call`
+- `POST /mcp`
+- `GET /sse`
 
-Beginner configs use `GHL_TOOL_PROFILE=curated` so agents see the high-level workflow tools first.
+For hosted HTTP deployments, set `MCP_AUTH_TOKEN` and send:
+
+```http
+Authorization: Bearer <token>
+```
+
+`GET /` and `GET /health` remain public for discovery and uptime checks.
+
+## Public Multi-User Connector
+
+For a shared hosted connector, prefer BYO-GHL mode:
+
+```bash
+MCP_AUTH_MODE=byo-ghl-oauth
+MCP_PUBLIC_BASE_URL=https://go.mcpgohighlevel.com
+MCP_OAUTH_SECRET=your_long_random_encryption_secret
+MCP_AUTH_TOKEN=your_remote_mcp_bearer_token
+```
+
+In this mode, users connect to the same remote MCP URL and authorize with their own:
+
+- Private Integration Token
+- Location ID
+
+The connector validates those credentials and returns a sealed token to the MCP client.
+
+## MCP Client Setup
+
+Generate client configs:
 
 ```bash
 npm run configure:codex
 npm run configure:claude
 npm run configure:cursor
 npm run configure:windsurf
+```
+
+Recommended beginner profile:
+
+```bash
+GHL_TOOL_PROFILE=curated
 ```
 
 Advanced examples:
@@ -77,31 +174,44 @@ node scripts/ghl-mcp.mjs configure codex --profile curated --json
 
 ## Tool Profiles
 
-- `curated` - recommended for agents; high-level CRM workflows with confirmation queues.
-- `stable` - production-friendly; official, supplemental, curated, and legacy-compatible tools.
-- `full` - everything.
-- `official` - official OpenAPI and live-docs supplemental tools.
-- `raw` - endpoint-level tools only.
+- `curated`: recommended for agents; high-level CRM workflows with safer confirmation queues.
+- `stable`: production-friendly; official, supplemental, curated, and legacy-compatible tools.
+- `full`: every available tool.
+- `official`: generated tools from official OpenAPI and live-docs supplemental sources.
+- `raw`: endpoint-level tools without curated workflows.
 
-## Run
+## Business Reporting
 
-```bash
-npm run start:stdio       # Desktop MCP clients
-npm run start:http        # Streamable HTTP at /mcp
-npm run start:legacy      # Legacy SSE at /sse
-```
+The reporting layer is designed for real business questions, not just raw endpoint calls.
 
-HTTP also exposes:
+Key tools:
 
-- `GET /health`
-- `GET /capabilities`
-- `GET /tools`
-- `POST /execute`
-- `POST /tools/call`
+- `get_user_business_report`
+- `get_saas_subscription_report`
+- `get_value_ladder_info_product_report`
+- `get_pipeline_activity_by_user`
+- `get_contact_ownership_report`
+- `get_call_activity_by_user`
+- `get_sms_activity_by_user`
+- `get_whatsapp_activity_by_user`
+- `get_email_activity_by_user`
+- `get_message_activity_by_user`
 
-For hosted HTTP deployments, set `MCP_AUTH_TOKEN` and send `Authorization: Bearer <token>` to protected MCP routes. `GET /` and `GET /health` remain public for discovery and uptime checks.
+Reports include:
 
-For a public multi-user connector, set `MCP_AUTH_MODE=byo-ghl-oauth`. Users connect to the same remote MCP URL and authorize with their own GoHighLevel token and Location ID through the built-in OAuth flow.
+- Calls by user: total, effective, non-effective, inbound, outbound, daily/monthly/yearly totals and averages.
+- SMS by user: total, effective, non-effective, delivered, failed, inbound, outbound, samples, and periods.
+- WhatsApp by user: activity, delivery/failure proxy, inbound/outbound, samples, and periods.
+- Email by user: activity, delivery/failure proxy, inbound/outbound, samples, and periods.
+- Contacts by user: assigned contacts, contacts with email, contacts with phone, missing data, and unassigned records.
+- Pipeline by user: open, won, lost, abandoned, stage distribution, pipeline distribution, value, and sample opportunities.
+
+Vertical report models:
+
+- SaaS subscription sales: setters, closers, sales leaders, and management.
+- Value Ladder info-products: lead magnet, masterclass/webinar, workshop, application, high ticket, upsell/continuity.
+
+See [Business Reporting](docs/GHL-BUSINESS-REPORTING.md).
 
 ## MCP Apps
 
@@ -110,75 +220,84 @@ npm run apps:setup
 npm run apps:preview
 ```
 
-Open `http://localhost:3001/preview`. Without GHL credentials, the apps use preview/demo states and tell you exactly which env vars are missing.
+Open `http://localhost:3001/preview`.
+
+Without GHL credentials, the app shows preview/demo states and explains which environment variables are missing.
 
 ## Tool Discovery
 
 ```bash
 npm run tools:list
 npm run tools:list -- --search contacts
-npm run tools:list -- --category contacts
+npm run tools:list -- --category analytics
 npm run tools:list -- --stability official
+npm run tools:list -- --access read
 npm run tools:list -- --access write
 npm run tools:list -- --destructive
 npm run tools:explorer
 ```
 
-The static explorer is `docs/tool-explorer.html`.
+The static explorer is [docs/tool-explorer.html](docs/tool-explorer.html).
 
-## High-Level Agent Tools
+## Maintenance
 
-Start agents with the curated profile and prefer these high-level tools before raw endpoints:
+```bash
+npm run build
+npm test -- --runInBand
+npm audit
+npm audit --prefix mcp-apps
+npm run tools:report
+npm run validate:api-lock
+```
 
-- `crm_location_overview`
-- `crm_daily_briefing`
-- `crm_search_everything`
-- `crm_next_best_actions`
-- `crm_get_next_page`
-- `crm_prepare_contact_followup`
-- `crm_prepare_lead_reactivation`
-- `crm_prepare_missed_call_response`
-- `crm_prepare_pipeline_cleanup`
-- `crm_prepare_review_request_batch`
-- `crm_prepare_invoice_followup`
+Refresh upstream API coverage intentionally:
 
-## Docs
+```bash
+npm run scan:ghl-api
+```
 
-- [Update Log](UPDATE_LOG.md)
+Generated coverage artifacts live in `docs/`.
+
+## Deployment
+
+Docker:
+
+```bash
+docker compose up --build -d
+```
+
+Hostinger VPS CI/CD:
+
+- [Hostinger CI/CD](docs/HOSTINGER-CICD.md)
+- [Deployment](docs/DEPLOYMENT.md)
+
+The production deployment used by this project runs behind Traefik and exposes:
+
+```text
+https://go.mcpgohighlevel.com/mcp
+```
+
+## Documentation
+
+- [Quickstart](QUICKSTART.md)
+- [Agent Setup](AGENT_SETUP.md)
 - [Setup](docs/SETUP.md)
 - [Usage](docs/USAGE.md)
 - [Clients](docs/CLIENTS.md)
 - [Tool Profiles](docs/TOOL-PROFILES.md)
+- [Business Reporting](docs/GHL-BUSINESS-REPORTING.md)
 - [Recipes](docs/RECIPES.md)
 - [Safety](docs/SAFETY.md)
+- [Security](SECURITY.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Deployment](docs/DEPLOYMENT.md)
-- [Hostinger CI/CD](docs/HOSTINGER-CICD.md)
-- [Development](docs/DEVELOPMENT.md)
 - [API Coverage](docs/API-COVERAGE.md)
-- [Business Reporting](docs/GHL-BUSINESS-REPORTING.md)
 - [Companion Tooling](docs/TOOLING.md)
+- [Update Log](UPDATE_LOG.md)
 
-## Update History
+## License
 
-| Date | Update # | Included |
-| --- | ---: | --- |
-| 2026-06-11 | 2 | Simplicity and power layer: easy setup commands, safe config writing, grouped live smoke checks, and high-level curated CRM agent tools. See [UPDATE_LOG.md](UPDATE_LOG.md) for the full permanent update description. |
-| 2026-06-11 | 1 | Onboarding and agent setup overhaul. See [UPDATE_LOG.md](UPDATE_LOG.md) for the full permanent update description. |
+This project is distributed under the [GoHighLevel MCP Server Community License](LICENSE). It allows personal, educational, internal, and non-commercial use. Commercial resale, sublicensing, or paid managed-service use requires separate written permission from the copyright holders.
 
-## API Coverage
+## Responsible Use
 
-- Official GHL endpoints parsed: `590`
-- Official endpoint coverage: `590 / 590`
-- Generated official endpoint tools: `238`
-- MCP tools in registry: `869`
-- Local-only endpoint references tracked for review: `253`
-
-Generated coverage artifacts live in `docs/`. Run `npm run scan:ghl-api` only when intentionally refreshing API coverage.
-
-## Safety
-
-- `.env` is ignored and must never be committed.
-- `test-tool` refuses write/destructive tools unless `--confirm` is supplied.
-- Curated workflow tools stage confirmation queues for writes.
-- Use `curated` for beginners and `stable` for production.
+Agents connected to this server can access CRM records and may be able to execute write operations depending on the exposed profile and credentials. Use least-privilege GoHighLevel tokens, prefer `curated` or `stable` profiles, keep hosted endpoints authenticated, and rotate credentials immediately if exposure is suspected.

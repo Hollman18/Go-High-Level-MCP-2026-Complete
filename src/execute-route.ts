@@ -78,7 +78,7 @@ export function registerExecuteRoutes(
       res.json({ result });
     } catch (err: any) {
       console.error(`[execute-route] POST /execute tool=${toolName} error:`, err.message);
-      res.status(500).json({ error: `Tool execution failed: ${err.message}` });
+      res.status(500).json({ error: 'Tool execution failed' });
     }
   });
 }

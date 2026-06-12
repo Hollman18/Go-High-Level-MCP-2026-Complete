@@ -1,39 +1,53 @@
 GoHighLevel MCP Server Community License
 
-Copyright (c) 2024 StrategixAI LLC
+Copyright (c) 2024 StrategixAI LLC and contributors
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to use,
-copy, modify, and distribute the Software for personal, educational, and 
-non-commercial purposes, subject to the following conditions:
+Permission is granted, free of charge, to any person obtaining a copy of this
+software and associated documentation files (the "Software"), to use, copy,
+modify, distribute, and run the Software for personal, educational, internal,
+and non-commercial purposes, subject to the conditions below.
 
-ALLOWED USES:
-✅ Personal use and integration with your own GoHighLevel accounts
-✅ Educational and learning purposes
-✅ Modification and customization for your own needs
-✅ Contributing back to the community project
-✅ Sharing and distributing the original or modified software for free
+Allowed uses:
 
-PROHIBITED USES:
-❌ Commercial resale or licensing of this software
-❌ Creating paid products or services based primarily on this software
-❌ Removing or modifying this license or copyright notices
+1. Personal use with your own GoHighLevel accounts.
+2. Internal business evaluation and non-commercial automation.
+3. Educational use, research, testing, and learning.
+4. Modification and customization for your own deployment.
+5. Free redistribution of the original or modified Software.
+6. Contributions back to this project.
 
-COMMUNITY SPIRIT:
-This project was created to help the GoHighLevel community build better
-AI integrations together. If you build something amazing with it, consider
-contributing back to help others!
+Prohibited uses:
+
+1. Selling, sublicensing, renting, or commercially reselling the Software.
+2. Offering a paid product or paid managed service based primarily on the
+   Software without separate written permission from the copyright holders.
+3. Removing or obscuring copyright, attribution, or license notices.
+4. Using the Software in a way that violates GoHighLevel terms, third-party
+   platform terms, privacy law, or applicable security requirements.
+
+Security and credential responsibility:
+
+The Software can connect to GoHighLevel accounts and may process private CRM
+data. You are responsible for protecting credentials, API tokens, OAuth secrets,
+customer data, deployment environments, and access to any hosted MCP endpoint.
+
+No trademark rights:
+
+This license does not grant rights to use the GoHighLevel, HighLevel, or related
+third-party trademarks except for descriptive references.
+
+Disclaimer:
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, SECURITY, AVAILABILITY, AND NONINFRINGEMENT. IN NO
+EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES,
+DATA LOSS, SECURITY INCIDENT, BUSINESS INTERRUPTION, OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
----
+Commercial use:
 
-Questions about commercial use? Contact: mykelandrewstanley@gmail.com
-Want to contribute? Pull requests welcome!
-Found this helpful? Consider supporting the project: https://buy.stripe.com/28E14o1hT7JAfstfvqdZ60y 
+For commercial licensing, paid redistribution, managed service use, or other
+rights not granted above, obtain separate written permission from the copyright
+holders.

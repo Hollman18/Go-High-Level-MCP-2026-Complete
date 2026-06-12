@@ -36,6 +36,13 @@ class GHLMCPHttpServer {
   }
 
   private setupExpress(): void {
+    this.app.disable('x-powered-by');
+    this.app.use((_req, res, next) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      next();
+    });
     this.app.use(cors({
       origin: (origin, callback) => {
         if (!origin) return callback(null, true);
@@ -50,7 +57,7 @@ class GHLMCPHttpServer {
       allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
       credentials: true
     }));
-    this.app.use(express.json());
+    this.app.use(express.json({ limit: process.env.MCP_JSON_LIMIT || '1mb' }));
   }
 
   private initializeGHLClient(): GHLApiClient {
@@ -134,7 +141,8 @@ class GHLMCPHttpServer {
         res.json({ result });
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
-        res.status(500).json({ error: `Tool execution failed: ${msg}` });
+        console.error(`[legacy-http] POST /tools/call tool=${name} error:`, msg);
+        res.status(500).json({ error: 'Tool execution failed' });
       }
     });
 
@@ -168,6 +176,14 @@ class GHLMCPHttpServer {
         },
         tools: this.registry.getToolCount()
       });
+    });
+
+    this.app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+      if (err instanceof Error && err.message === 'CORS not allowed') {
+        res.status(403).json({ error: 'CORS origin not allowed' });
+        return;
+      }
+      next(err);
     });
   }
 
