@@ -13005,6 +13005,14 @@
         "caller": "makeRequest"
       },
       {
+        "key": "GET /conversations/messages/export",
+        "method": "GET",
+        "path": "/conversations/messages/export",
+        "normalizedPath": "/conversations/messages/export",
+        "sourceFile": "src/tools/reporting-tools.ts",
+        "caller": "makeRequest"
+      },
+      {
         "key": "POST /opportunities/search",
         "method": "POST",
         "path": "/opportunities/search",

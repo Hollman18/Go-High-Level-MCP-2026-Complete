@@ -9,8 +9,8 @@ Generated from official GHL docs commit: ae4d260
 - Official endpoints parsed: 590
 - Official endpoints covered: 590
 - Coverage: 100%
-- MCP tools in registry: 866
-- Read tools: 431
+- MCP tools in registry: 867
+- Read tools: 432
 - Write tools: 327
 - Delete/destructive tools: 108
 - Local-only endpoint references tracked: 253
@@ -19,7 +19,7 @@ Generated from official GHL docs commit: ae4d260
 
 - Official OpenAPI tools: 234
 - Live-docs supplemental tools: 14
-- Legacy-compatible tools: 506
+- Legacy-compatible tools: 507
 - Private/internal unstable tools: 88
 - Deprecated/compatibility tools: 24
 
@@ -34,8 +34,8 @@ Generated from official GHL docs commit: ae4d260
 | contacts | 31 |
 | locations | 27 |
 | official-social-media-posting | 24 |
+| analytics | 23 |
 | payments | 22 |
-| analytics | 22 |
 | official-saas-api | 21 |
 | conversations | 20 |
 | phone-numbers | 20 |

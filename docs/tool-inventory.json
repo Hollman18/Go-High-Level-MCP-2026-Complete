@@ -6735,6 +6735,23 @@
       "stability": "legacy-compatible"
     },
     {
+      "name": "generate_historical_activity_report",
+      "module": "reporting",
+      "description": "Generate a complete historical activity report with automatic pagination across calls, SMS, WhatsApp, email, or all exported conversation activity. Returns executive totals, seller/leader rollups, cursor diagnostics, and optional detail/CSV rows.",
+      "category": "analytics",
+      "access": "read",
+      "destructive": false,
+      "readOnly": true,
+      "idempotent": true,
+      "required": [
+        "startDate",
+        "endDate"
+      ],
+      "scopes": [],
+      "source": "historical-export",
+      "stability": "legacy-compatible"
+    },
+    {
       "name": "get_sms_activity_by_user",
       "module": "reporting",
       "description": "Build an SMS-by-seller report with sent, received, delivered, failed, and sample message details.",
